@@ -24,7 +24,7 @@ from accounting.transforms import (
 from accounting.aggregation import (
     preaggregate, sales_details, proyectos_especiales,
     detail_by_ceco, detail_resultado_financiero,
-    bs_detail_by_cuenta, bs_top20_by_nit,
+    bs_detail_by_cuenta, bs_top20_by_nit, append_total_row,
 )
 from accounting.statements import pl_summary, bs_summary
 from accounting.notes import BS_DETAIL_ENTRIES
@@ -399,11 +399,13 @@ def load_bs_data(company: str, year: int, *, force_refresh: bool = False) -> dic
     # BS note detail tables (reuse the same aggregation functions as Excel/PDF)
     if df_bs is not None:
         for key, partidas, include_pf, exclude_pf in BS_DETAIL_ENTRIES:
-            result[key] = _df_to_records(bs_detail_by_cuenta(
+            detail = bs_detail_by_cuenta(
                 df_bs, partidas,
                 cuenta_prefixes=include_pf,
                 exclude_cuenta_prefixes=exclude_pf,
-            ))
+            )
+            detail = append_total_row(detail, DESCRIPCION)
+            result[key] = _df_to_records(detail)
 
         # NIT top-20 ranking tables
         _BS_NIT_RANKINGS = [
