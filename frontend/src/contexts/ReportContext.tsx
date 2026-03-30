@@ -4,7 +4,10 @@ import { API_CONFIG } from '@/config';
 import type { ReportData, PLReportData, BSReportData, CompanyMap, Granularity, PeriodRange, DisplayColumn, MonthSource, ReportRow } from '@/types';
 
 export type View = 'pl' | 'bs' | 'ingresos' | 'costo' | 'gasto_venta' | 'gasto_admin' | 'dya' | 'resultado_financiero'
-    | 'bs_efectivo' | 'bs_cxc_comerciales' | 'bs_cxc_otras';
+    | 'bs_efectivo' | 'bs_cxc_comerciales' | 'bs_cxc_otras' | 'bs_cxc_relacionadas'
+    | 'bs_ppe' | 'bs_otros_activos'
+    | 'bs_cxp_comerciales' | 'bs_cxp_otras' | 'bs_cxp_relacionadas'
+    | 'bs_provisiones' | 'bs_tributos';
 
 export function isBsView(view: View): boolean {
     return view === 'bs' || view.startsWith('bs_');

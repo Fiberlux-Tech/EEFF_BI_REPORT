@@ -15,12 +15,23 @@ export const VIEW_TITLE_MAP: Record<View, string> = {
     bs_efectivo: 'Efectivo y Equivalentes',
     bs_cxc_comerciales: 'Cuentas por Cobrar Comerciales',
     bs_cxc_otras: 'Otras Cuentas por Cobrar',
+    bs_cxc_relacionadas: 'Cuentas por Cobrar Relacionadas',
+    bs_ppe: 'Propiedad, Planta, Equipo e Intangibles',
+    bs_otros_activos: 'Otros Activos',
+    bs_cxp_comerciales: 'Cuentas por Pagar Comerciales',
+    bs_cxp_otras: 'Otras Cuentas por Pagar',
+    bs_cxp_relacionadas: 'Cuentas por Pagar Relacionadas',
+    bs_provisiones: 'Provisiones por Beneficios a Empleados',
+    bs_tributos: 'Tributos por Pagar',
 };
 
 // ── Note view table configs ──────────────────────────────────────────
 
 export type NoteView = 'ingresos' | 'costo' | 'gasto_venta' | 'gasto_admin' | 'dya' | 'resultado_financiero'
-    | 'bs_efectivo' | 'bs_cxc_comerciales' | 'bs_cxc_otras';
+    | 'bs_efectivo' | 'bs_cxc_comerciales' | 'bs_cxc_otras' | 'bs_cxc_relacionadas'
+    | 'bs_ppe' | 'bs_otros_activos'
+    | 'bs_cxp_comerciales' | 'bs_cxp_otras' | 'bs_cxp_relacionadas'
+    | 'bs_provisiones' | 'bs_tributos';
 
 export interface NoteViewConfig {
     tables: (d: ReportData) => TableConfig[];
@@ -86,6 +97,59 @@ export const VIEW_TABLE_CONFIGS: Record<NoteView, NoteViewConfig> = {
         tables: (d) => [
             { title: 'Otras Cuentas por Cobrar', rows: d.bs_cxc_otras ?? [], labelKeys: ['CUENTA_CONTABLE', 'DESCRIPCION'], headerLabels: ['Cuenta', 'Descripcion'], partida: 'Otras cuentas por cobrar (neto)', filterCol: 'CUENTA_CONTABLE' },
             { title: 'Top 20 por NIT', rows: d.bs_cxc_otras_nit_top20 ?? [], labelKeys: ['NIT', 'RAZON_SOCIAL'], headerLabels: ['NIT', 'Razon Social'], partida: 'Otras cuentas por cobrar (neto)', filterCol: 'NIT' },
+        ],
+        labelKeys: ['CUENTA_CONTABLE', 'DESCRIPCION'],
+    },
+    bs_cxc_relacionadas: {
+        tables: (d) => [
+            { title: 'Cuentas por Cobrar Relacionadas', rows: d.bs_cxc_relacionadas ?? [], labelKeys: ['CUENTA_CONTABLE', 'DESCRIPCION'], headerLabels: ['Cuenta', 'Descripcion'], partida: 'Otras cuentas por cobrar relacionadas', filterCol: 'CUENTA_CONTABLE' },
+        ],
+        labelKeys: ['CUENTA_CONTABLE', 'DESCRIPCION'],
+    },
+    bs_ppe: {
+        tables: (d) => [
+            { title: 'Propiedades, Planta y Equipo', rows: d.bs_ppe ?? [], labelKeys: ['CUENTA_CONTABLE', 'DESCRIPCION'], headerLabels: ['Cuenta', 'Descripcion'], partida: 'Propiedades, planta y equipo (neto)', filterCol: 'CUENTA_CONTABLE' },
+            { title: 'Depreciacion', rows: d.bs_ppe_depreciacion ?? [], labelKeys: ['CUENTA_CONTABLE', 'DESCRIPCION'], headerLabels: ['Cuenta', 'Descripcion'], partida: 'Propiedades, planta y equipo (neto)', filterCol: 'CUENTA_CONTABLE' },
+            { title: 'Intangible', rows: d.bs_intangible ?? [], labelKeys: ['CUENTA_CONTABLE', 'DESCRIPCION'], headerLabels: ['Cuenta', 'Descripcion'], partida: 'Intangible', filterCol: 'CUENTA_CONTABLE' },
+            { title: 'Amortizacion', rows: d.bs_intangible_amortizacion ?? [], labelKeys: ['CUENTA_CONTABLE', 'DESCRIPCION'], headerLabels: ['Cuenta', 'Descripcion'], partida: 'Intangible', filterCol: 'CUENTA_CONTABLE' },
+        ],
+        labelKeys: ['CUENTA_CONTABLE', 'DESCRIPCION'],
+    },
+    bs_otros_activos: {
+        tables: (d) => [
+            { title: 'Otros Activos', rows: d.bs_otros_activos ?? [], labelKeys: ['CUENTA_CONTABLE', 'DESCRIPCION'], headerLabels: ['Cuenta', 'Descripcion'], partida: 'Otros Activos', filterCol: 'CUENTA_CONTABLE' },
+        ],
+        labelKeys: ['CUENTA_CONTABLE', 'DESCRIPCION'],
+    },
+    bs_cxp_comerciales: {
+        tables: (d) => [
+            { title: 'Cuentas por Pagar Comerciales', rows: d.bs_cxp_comerciales ?? [], labelKeys: ['CUENTA_CONTABLE', 'DESCRIPCION'], headerLabels: ['Cuenta', 'Descripcion'], partida: 'Cuentas por pagar comerciales', filterCol: 'CUENTA_CONTABLE' },
+            { title: 'Top 20 por NIT', rows: d.bs_cxp_comerciales_nit_top20 ?? [], labelKeys: ['NIT', 'RAZON_SOCIAL'], headerLabels: ['NIT', 'Razon Social'], partida: 'Cuentas por pagar comerciales', filterCol: 'NIT' },
+        ],
+        labelKeys: ['CUENTA_CONTABLE', 'DESCRIPCION'],
+    },
+    bs_cxp_otras: {
+        tables: (d) => [
+            { title: 'Otras Cuentas por Pagar', rows: d.bs_cxp_otras ?? [], labelKeys: ['CUENTA_CONTABLE', 'DESCRIPCION'], headerLabels: ['Cuenta', 'Descripcion'], partida: 'Otras cuentas por pagar', filterCol: 'CUENTA_CONTABLE' },
+            { title: 'Top 20 por NIT', rows: d.bs_cxp_otras_nit_top20 ?? [], labelKeys: ['NIT', 'RAZON_SOCIAL'], headerLabels: ['NIT', 'Razon Social'], partida: 'Otras cuentas por pagar', filterCol: 'NIT' },
+        ],
+        labelKeys: ['CUENTA_CONTABLE', 'DESCRIPCION'],
+    },
+    bs_cxp_relacionadas: {
+        tables: (d) => [
+            { title: 'Cuentas por Pagar Relacionadas', rows: d.bs_cxp_relacionadas ?? [], labelKeys: ['CUENTA_CONTABLE', 'DESCRIPCION'], headerLabels: ['Cuenta', 'Descripcion'], partida: 'Otras cuentas por Pagar Relacionadas', filterCol: 'CUENTA_CONTABLE' },
+        ],
+        labelKeys: ['CUENTA_CONTABLE', 'DESCRIPCION'],
+    },
+    bs_provisiones: {
+        tables: (d) => [
+            { title: 'Provisiones por Beneficios a Empleados', rows: d.bs_provisiones ?? [], labelKeys: ['CUENTA_CONTABLE', 'DESCRIPCION'], headerLabels: ['Cuenta', 'Descripcion'], partida: 'Provisiones por beneficios a empleados', filterCol: 'CUENTA_CONTABLE' },
+        ],
+        labelKeys: ['CUENTA_CONTABLE', 'DESCRIPCION'],
+    },
+    bs_tributos: {
+        tables: (d) => [
+            { title: 'Tributos por Pagar', rows: d.bs_tributos ?? [], labelKeys: ['CUENTA_CONTABLE', 'DESCRIPCION'], headerLabels: ['Cuenta', 'Descripcion'], partida: 'Tributos por Pagar', filterCol: 'CUENTA_CONTABLE' },
         ],
         labelKeys: ['CUENTA_CONTABLE', 'DESCRIPCION'],
     },

@@ -174,6 +174,19 @@ function getDataKeyForTable(table: TableConfig, data: ReportData): keyof ReportD
         ['bs_cxc_comerciales_nit_top20', data.bs_cxc_comerciales_nit_top20],
         ['bs_cxc_otras', data.bs_cxc_otras],
         ['bs_cxc_otras_nit_top20', data.bs_cxc_otras_nit_top20],
+        ['bs_cxc_relacionadas', data.bs_cxc_relacionadas],
+        ['bs_ppe', data.bs_ppe],
+        ['bs_ppe_depreciacion', data.bs_ppe_depreciacion],
+        ['bs_intangible', data.bs_intangible],
+        ['bs_intangible_amortizacion', data.bs_intangible_amortizacion],
+        ['bs_otros_activos', data.bs_otros_activos],
+        ['bs_cxp_comerciales', data.bs_cxp_comerciales],
+        ['bs_cxp_comerciales_nit_top20', data.bs_cxp_comerciales_nit_top20],
+        ['bs_cxp_otras', data.bs_cxp_otras],
+        ['bs_cxp_otras_nit_top20', data.bs_cxp_otras_nit_top20],
+        ['bs_cxp_relacionadas', data.bs_cxp_relacionadas],
+        ['bs_provisiones', data.bs_provisiones],
+        ['bs_tributos', data.bs_tributos],
     ];
     for (const [key, rows] of mapping) {
         if (table.rows === rows) return key;

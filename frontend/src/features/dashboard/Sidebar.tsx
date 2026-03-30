@@ -33,8 +33,16 @@ const PL_SUB_ITEMS = [
 const BS_SUB_ITEMS = [
     { view: 'bs', label: 'Resumen' },
     { view: 'bs_efectivo', label: 'Efectivo y Equivalentes' },
-    { view: 'bs_cxc_comerciales', label: 'Cuentas por Cobrar Comerciales' },
-    { view: 'bs_cxc_otras', label: 'Otras Cuentas por Cobrar' },
+    { view: 'bs_cxc_comerciales', label: 'CxC Comerciales' },
+    { view: 'bs_cxc_otras', label: 'Otras CxC' },
+    { view: 'bs_cxc_relacionadas', label: 'CxC Relacionadas' },
+    { view: 'bs_ppe', label: 'PPE e Intangibles' },
+    { view: 'bs_otros_activos', label: 'Otros Activos' },
+    { view: 'bs_cxp_comerciales', label: 'CxP Comerciales' },
+    { view: 'bs_cxp_otras', label: 'Otras CxP' },
+    { view: 'bs_cxp_relacionadas', label: 'CxP Relacionadas' },
+    { view: 'bs_provisiones', label: 'Provisiones' },
+    { view: 'bs_tributos', label: 'Tributos' },
 ] as const;
 
 function ExportButton({ onClick, disabled, svgPath, label }: {
