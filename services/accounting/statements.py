@@ -12,6 +12,7 @@ from accounting.rules import (
 )
 from accounting.aggregation import TOTAL_COL, pivot_by_month, _apply_bs_cumsum
 from config.exceptions import DataValidationError
+from config.fields import PARTIDA_PL, PARTIDA_BS, SECCION_BS, CUENTA_CONTABLE, DESCRIPCION
 
 
 logger = logging.getLogger("plantillas.statement_builder")
@@ -83,18 +84,18 @@ def build_pl_rows(lookup, val_cols):
         rows.append([""] + [None] * len(val_cols))
         rows.append(data_row("POR CLASIFICAR"))
 
-    return pd.DataFrame(rows, columns=["PARTIDA_PL"] + val_cols)
+    return pd.DataFrame(rows, columns=[PARTIDA_PL] + val_cols)
 
 
 def build_partida_lookup(pivot, val_cols):
     """Build a {PARTIDA_PL: numpy_array} lookup from a pivoted DataFrame."""
-    partida_values = pivot["PARTIDA_PL"].tolist()
+    partida_values = pivot[PARTIDA_PL].tolist()
     numeric_matrix = pivot[val_cols].values.astype(float)
     return {partida: numeric_matrix[i] for i, partida in enumerate(partida_values)}
 
 
 def pl_summary(df):
-    pivot = pivot_by_month(df, "PARTIDA_PL", add_total=True)
+    pivot = pivot_by_month(df, PARTIDA_PL, add_total=True)
     mes_cols = [c for c in pivot.columns if c in MONTH_NAMES_SET]
     val_cols = mes_cols + [TOTAL_COL]
     lookup = build_partida_lookup(pivot, val_cols)
@@ -244,7 +245,7 @@ def _build_bs_rows(partida_lookup, cuenta_detail, val_cols, section_map, *, incl
 
     _validate_bs_balance(section_totals, total_pasivo_patrimonio, strict_balance=strict_balance)
 
-    return pd.DataFrame(rows, columns=["PARTIDA_BS"] + val_cols)
+    return pd.DataFrame(rows, columns=[PARTIDA_BS] + val_cols)
 
 
 def _native_section(cuenta_code):
@@ -306,7 +307,7 @@ def extract_utilidad_neta(pl_df, bs_val_cols):
     np.ndarray
         Cumulative UTILIDAD NETA aligned to bs_val_cols, or None if not found.
     """
-    row = pl_df[pl_df["PARTIDA_PL"] == "UTILIDAD NETA"]
+    row = pl_df[pl_df[PARTIDA_PL] == "UTILIDAD NETA"]
     if row.empty:
         logger.warning("UTILIDAD NETA not found in P&L — Resultados del Ejercicio will be omitted.")
         return None
@@ -339,16 +340,16 @@ def bs_summary(df, *, include_detail=True, pl_summary_df=None, strict_balance=Fa
     """
     # Cuenta-level pivot (finest grain — we'll aggregate partidas from this)
     cuenta_pivot = pivot_by_month(
-        df, ["PARTIDA_BS", "SECCION_BS", "CUENTA_CONTABLE", "DESCRIPCION"],
+        df, [PARTIDA_BS, SECCION_BS, CUENTA_CONTABLE, DESCRIPCION],
         add_total=False,
     )
     cuenta_pivot, mes_cols, val_cols = _apply_bs_cumsum(cuenta_pivot, keep_months)
 
     # Build raw cuenta rows
-    partida_list = cuenta_pivot["PARTIDA_BS"].tolist()
-    seccion_list = cuenta_pivot["SECCION_BS"].tolist()
-    cuenta_list = cuenta_pivot["CUENTA_CONTABLE"].tolist()
-    desc_list = cuenta_pivot["DESCRIPCION"].tolist()
+    partida_list = cuenta_pivot[PARTIDA_BS].tolist()
+    seccion_list = cuenta_pivot[SECCION_BS].tolist()
+    cuenta_list = cuenta_pivot[CUENTA_CONTABLE].tolist()
+    desc_list = cuenta_pivot[DESCRIPCION].tolist()
     val_matrix = cuenta_pivot[val_cols].values.astype(float)
     raw_rows = [
         (partida, seccion, cuenta, f"{cuenta}  {desc}", vals)

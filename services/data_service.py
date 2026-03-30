@@ -25,6 +25,10 @@ from accounting.statements import pl_summary, bs_summary
 from excel.builder import build_excel_data, build_bs_data
 from config.calendar import MONTH_NAMES, MONTH_NAMES_LIST, MONTH_NAMES_SET
 from config.company import VALID_COMPANIES
+from config.fields import (
+    ASIENTO, CUENTA_CONTABLE, DESCRIPCION, NIT, RAZON_SOCIAL,
+    CENTRO_COSTO, DESC_CECO, FECHA, SALDO, PARTIDA_PL, MES,
+)
 
 logger = logging.getLogger("flxcontabilidad.data_service")
 
@@ -220,12 +224,12 @@ def load_report_data(company: str, year: int, *, force_refresh: bool = False) ->
 
 # Columns to expose in the detail view
 _DETAIL_COLUMNS = [
-    "ASIENTO", "CUENTA_CONTABLE", "DESCRIPCION", "NIT", "RAZON_SOCIAL",
-    "CENTRO_COSTO", "DESC_CECO", "FECHA", "SALDO",
+    ASIENTO, CUENTA_CONTABLE, DESCRIPCION, NIT, RAZON_SOCIAL,
+    CENTRO_COSTO, DESC_CECO, FECHA, SALDO,
 ]
 
 # Columns allowed for client-side filtering (excludes FECHA/SALDO)
-_FILTERABLE_COLUMNS = frozenset(_DETAIL_COLUMNS) - {"FECHA", "SALDO"}
+_FILTERABLE_COLUMNS = frozenset(_DETAIL_COLUMNS) - {FECHA, SALDO}
 
 # Reverse lookup: month name → month number
 _MONTH_NAME_TO_NUM = {v: k for k, v in MONTH_NAMES.items()}
@@ -248,13 +252,13 @@ def get_detail_records(
         if df is None:
             return []
 
-    mask = df["PARTIDA_PL"] == partida
+    mask = df[PARTIDA_PL] == partida
 
     if month is not None:
         month_num = _MONTH_NAME_TO_NUM.get(month)
         if month_num is None:
             return []
-        mask = mask & (df["MES"] == month_num)
+        mask = mask & (df[MES] == month_num)
 
     if filter_col and filter_val is not None:
         if filter_col not in _FILTERABLE_COLUMNS:
@@ -262,6 +266,6 @@ def get_detail_records(
         mask = mask & (df[filter_col].astype(str) == filter_val)
 
     result = df.loc[mask, _DETAIL_COLUMNS].copy()
-    result["FECHA"] = result["FECHA"].dt.strftime("%Y-%m-%d")
-    result = result.sort_values("SALDO", ascending=False).reset_index(drop=True)
+    result[FECHA] = result[FECHA].dt.strftime("%Y-%m-%d")
+    result = result.sort_values(SALDO, ascending=False).reset_index(drop=True)
     return _df_to_records(result)

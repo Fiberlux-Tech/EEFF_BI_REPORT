@@ -8,6 +8,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
+from config.fields import DESCRIPCION, CENTRO_COSTO, DESC_CECO, NIT, RAZON_SOCIAL
+
 
 
 class RenderPattern(Enum):
@@ -26,13 +28,13 @@ class DataDomain(Enum):
 
 # ── Label column presets ──────────────────────────────────────────────────
 
-_CUENTA = ("DESCRIPCION",)
-_CUENTA_HDR = ("DESCRIPCION",)
-_CECO = ("CENTRO_COSTO", "DESC_CECO")
+_CUENTA = (DESCRIPCION,)
+_CUENTA_HDR = (DESCRIPCION,)
+_CECO = (CENTRO_COSTO, DESC_CECO)
 _CECO_HDR = ("CC", "CENTRO DE COSTO")
-_NIT = ("NIT", "RAZON_SOCIAL")
+_NIT = (NIT, RAZON_SOCIAL)
 _NIT_HDR = ("NIT", "RAZON SOCIAL")
-_RAZON = ("RAZON_SOCIAL",)
+_RAZON = (RAZON_SOCIAL,)
 _RAZON_HDR = ("RAZON SOCIAL",)
 
 
