@@ -4,6 +4,7 @@ import logging
 
 import pandas as pd
 
+from config.fields import PARTIDA_BS
 from accounting.transforms import prepare_stmt, prepare_bs_stmt
 from accounting.aggregation import (
     bs_cxc_relacionadas_by_nit,
@@ -71,7 +72,7 @@ def build_pdf_data(raw_current_full: pd.DataFrame, raw_prev: pd.DataFrame,
     else:
         logger.warning("No BS data for PDF — balance sheet page will be empty.")
         bs_cols = list(build_bs_column_names(year))
-        pdf_bs = pd.DataFrame(columns=["PARTIDA_BS"] + bs_cols)
+        pdf_bs = pd.DataFrame(columns=[PARTIDA_BS] + bs_cols)
 
     # BS detail notes
     bs_details = {}

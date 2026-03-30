@@ -9,6 +9,10 @@ from flask import Blueprint, jsonify, request, send_file
 from auth import login_required
 from config.calendar import MONTH_NAMES_SET, MIN_YEAR
 from config.company import VALID_COMPANIES, COMPANY_META
+from config.fields import (
+    CUENTA_CONTABLE, DESCRIPCION, NIT, RAZON_SOCIAL,
+    CENTRO_COSTO, DESC_CECO,
+)
 from config.exceptions import (
     RequestValidationError, PlantillasError, QueryError,
     ExportError, DataValidationError,
@@ -92,8 +96,8 @@ def load_data():
 # ── Detail drill-down ──────────────────────────────────────────────────
 
 _ALLOWED_FILTER_COLS = {
-    "CUENTA_CONTABLE", "DESCRIPCION", "NIT", "RAZON_SOCIAL",
-    "CENTRO_COSTO", "DESC_CECO",
+    CUENTA_CONTABLE, DESCRIPCION, NIT, RAZON_SOCIAL,
+    CENTRO_COSTO, DESC_CECO,
 }
 
 

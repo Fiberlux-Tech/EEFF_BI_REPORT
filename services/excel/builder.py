@@ -7,6 +7,10 @@ import pandas as pd
 
 from accounting.rules import DETAIL_CATEGORIES
 from config.calendar import MONTH_NAMES, MONTH_NAMES_SET
+from config.fields import (
+    CUENTA_CONTABLE, DESCRIPCION, PARTIDA_BS,
+    CENTRO_COSTO, DESC_CECO,
+)
 from config.period import derive_period_type, get_period_months
 from accounting.transforms import (
     prepare_pnl, filter_for_statements, assign_partida_pl,
@@ -71,12 +75,12 @@ def build_bs_data(raw_bs: pd.DataFrame, pl_summary_df: pd.DataFrame, report_data
                                   strict_balance=strict_balance, keep_months=keep_months)
 
     # VALIDADOR_BS: full BS opened by CUENTA_CONTABLE
-    bs["bs_validador"] = bs_detail_by_cuenta(df, df["PARTIDA_BS"].unique().tolist(), keep_months=keep_months)
+    bs["bs_validador"] = bs_detail_by_cuenta(df, df[PARTIDA_BS].unique().tolist(), keep_months=keep_months)
 
     # Track CUENTA_CONTABLE values with no BS classification (POR DEFINIR)
     _POR_DEFINIR = {"POR DEFINIR ACTIVO", "POR DEFINIR PASIVO", "POR DEFINIR PATRIMONIO"}
-    undef_mask = df["PARTIDA_BS"].isin(_POR_DEFINIR)
-    bs["bs_undefined_cuentas"] = set(df.loc[undef_mask, "CUENTA_CONTABLE"].unique())
+    undef_mask = df[PARTIDA_BS].isin(_POR_DEFINIR)
+    bs["bs_undefined_cuentas"] = set(df.loc[undef_mask, CUENTA_CONTABLE].unique())
 
     # Detail sheets by partida (no TOTAL column — cumulative months only)
     for key, partidas, include_pf, exclude_pf in BS_DETAIL_SHEETS:
@@ -105,9 +109,9 @@ def build_excel_data(raw: pd.DataFrame) -> PnLReportData:
     logger.info("Preparing Excel data...")
     df = prepare_pnl(raw)
 
-    by_cuenta = pivot_by_month(df, ["CUENTA_CONTABLE", "DESCRIPCION"], add_total=True)
-    by_ceco = pivot_by_month(df, ["CENTRO_COSTO", "DESC_CECO"], add_total=True)
-    by_ceco_cuenta = pivot_by_month(df, ["CENTRO_COSTO", "DESC_CECO", "CUENTA_CONTABLE", "DESCRIPCION"], add_total=True)
+    by_cuenta = pivot_by_month(df, [CUENTA_CONTABLE, DESCRIPCION], add_total=True)
+    by_ceco = pivot_by_month(df, [CENTRO_COSTO, DESC_CECO], add_total=True)
+    by_ceco_cuenta = pivot_by_month(df, [CENTRO_COSTO, DESC_CECO, CUENTA_CONTABLE, DESCRIPCION], add_total=True)
 
     df_stmt = filter_for_statements(df)
     excluded = get_excluded_cuentas(df, df_stmt)

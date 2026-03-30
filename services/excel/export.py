@@ -2,6 +2,7 @@ import pandas as pd
 
 from models.models import PnLReportData
 from accounting.aggregation import TOTAL_COL, append_total_row
+from config.fields import CUENTA_CONTABLE
 from accounting.rules import get_bs_group, BS_GROUP_TABLES
 from config.nota import RenderPattern
 from config.nota_utils import numbered_groups, nota_title
@@ -123,7 +124,7 @@ def _write_multi_table_sheet(writer, sheet_name, sections):
     def _prepare(section):
         if len(section) == 2:
             title, df = section
-            return title, append_total_row(df, "CUENTA_CONTABLE")
+            return title, append_total_row(df, CUENTA_CONTABLE)
         title, df, label_col = section
         if label_col is not None:
             return title, append_total_row(df, label_col)
@@ -142,7 +143,7 @@ def _write_multi_table_sheet(writer, sheet_name, sections):
 
 def _write_single_bs_sheet(writer, df, sheet_name, title):
     """Write a single-table BS detail sheet with TOTAL row appended."""
-    df = append_total_row(df, "CUENTA_CONTABLE")
+    df = append_total_row(df, CUENTA_CONTABLE)
     _write_sheet(writer, df, sheet_name, title)
 
 
@@ -152,7 +153,7 @@ def _write_relacionadas_sheet(writer, sheet_name, title, bs_detail_df, nit_pivot
     The NIT pivot table is appended below with a descriptive title.
     NIT and RAZON_SOCIAL header cells are cleared during styling.
     """
-    bs_detail_df = append_total_row(bs_detail_df, "CUENTA_CONTABLE")
+    bs_detail_df = append_total_row(bs_detail_df, CUENTA_CONTABLE)
     _write_sheet(writer, bs_detail_df, sheet_name, title)
     if _has_data(nit_pivot_df):
         ws = writer.sheets[sheet_name]
@@ -180,7 +181,7 @@ def _add_pdf_category_col(df: pd.DataFrame, bs_key: str = "bs_efectivo") -> pd.D
     if group_table is None:
         return df
     df = df.copy()
-    df["Categoria PDF"] = df["CUENTA_CONTABLE"].apply(
+    df["Categoria PDF"] = df[CUENTA_CONTABLE].apply(
         lambda c: get_bs_group(c, group_table) or "Sin clasificar"
     )
     return df
@@ -227,7 +228,7 @@ def _write_grouped_nota(writer, sheet_name, resolved, bs, year):
         for _, entry, title, df in resolved:
             if entry.bs_key in _grouped_bs_keys:
                 df = _add_pdf_category_col(df, entry.bs_key)
-            sections.append((title, df, "CUENTA_CONTABLE"))
+            sections.append((title, df, CUENTA_CONTABLE))
             # Insert NIT ranking table after this nota's cuenta table
             if entry.nit_ranking_key:
                 nit_df = bs.get(entry.nit_ranking_key)

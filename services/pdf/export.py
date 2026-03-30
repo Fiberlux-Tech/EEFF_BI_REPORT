@@ -39,6 +39,7 @@ from pdf.constants import (
     BORDER_TOTAL, BORDER_SUBTOTAL, BORDER_NORMAL, BORDER_COVER,
     LOGOS_DIR, _ZERO_STRINGS, _LEGAL_SUFFIX_REPLACEMENTS,
 )
+from config.fields import CUENTA_CONTABLE, DESCRIPCION, PARTIDA_PL, PARTIDA_BS, NIT, RAZON_SOCIAL
 from pdf.renderer import _render_table, _compute_widths, _truncate_text
 
 
@@ -97,9 +98,9 @@ def _split_total_rows(df, *, check_descripcion=False):
     -------
     (data_rows, total_rows) : tuple[pd.DataFrame, pd.DataFrame]
     """
-    is_total = df["CUENTA_CONTABLE"].astype(str).str.strip().str.upper().eq(_TOTAL_LABEL)
+    is_total = df[CUENTA_CONTABLE].astype(str).str.strip().str.upper().eq(_TOTAL_LABEL)
     if check_descripcion:
-        is_total = is_total | df["DESCRIPCION"].astype(str).str.strip().str.upper().eq(_TOTAL_LABEL)
+        is_total = is_total | df[DESCRIPCION].astype(str).str.strip().str.upper().eq(_TOTAL_LABEL)
     return df[~is_total].copy(), df[is_total]
 
 
@@ -129,7 +130,7 @@ def _assign_group_order(df, group_table, classify_fn):
     """
     group_order = _build_group_order(group_table)
     df = df.copy()
-    df["_group"] = df["CUENTA_CONTABLE"].apply(classify_fn).fillna("Sin clasificar")
+    df["_group"] = df[CUENTA_CONTABLE].apply(classify_fn).fillna("Sin clasificar")
     df["_group_order"] = df["_group"].map(group_order).fillna(UNCLASSIFIED_SORT_ORDER).astype(int)
     return df, group_order
 
@@ -166,7 +167,7 @@ def _inject_efectivo_groups(df: pd.DataFrame, value_cols: list[str]) -> pd.DataF
     for group_label, group_df in data_rows.groupby("_group_order", sort=True):
         label = group_df["_group"].iloc[0]
         header = pd.DataFrame(
-            [{"CUENTA_CONTABLE": _GROUP_SENTINEL, "DESCRIPCION": label, **blank_vals}],
+            [{CUENTA_CONTABLE: _GROUP_SENTINEL, DESCRIPCION: label, **blank_vals}],
             columns=df.columns,
         )
         pieces.append(header)
@@ -208,7 +209,7 @@ def _aggregate_by_group(df: pd.DataFrame, value_cols: list[str],
 
     result_rows = []
     for _, row in agg.iterrows():
-        rec = {"CUENTA_CONTABLE": "", "DESCRIPCION": row["_group"],
+        rec = {CUENTA_CONTABLE: "", DESCRIPCION: row["_group"],
                **{vc: row[vc] for vc in value_cols}}
         result_rows.append(rec)
 
@@ -217,7 +218,7 @@ def _aggregate_by_group(df: pd.DataFrame, value_cols: list[str],
         result[vc] = result[vc].astype(float)
 
     # Always append a computed total row (sum of all group rows)
-    total_rec = {"CUENTA_CONTABLE": _TOTAL_LABEL, "DESCRIPCION": _TOTAL_LABEL,
+    total_rec = {CUENTA_CONTABLE: _TOTAL_LABEL, DESCRIPCION: _TOTAL_LABEL,
                  **{vc: result[vc].sum() for vc in value_cols}}
     result = pd.concat([result, _make_row_df(total_rec, df.columns, value_cols)],
                        ignore_index=True)
@@ -681,15 +682,15 @@ def _render_nit_pivot(pdf: FinancialPDF, nit_df, year_label, *,
         return
 
     # Truncate RAZON_SOCIAL at " - " to remove duplicate abbreviated names
-    razon = nit_df["RAZON_SOCIAL"].apply(
+    razon = nit_df[RAZON_SOCIAL].apply(
         lambda s: s.split(" - ")[0].strip() if isinstance(s, str) and " - " in s else s
     )
     # Abbreviate common Peruvian legal suffixes (longest first to avoid
     # partial matches, e.g. "SOCIEDAD ANONIMA CERRADA" before "SOCIEDAD ANONIMA")
     razon = razon.apply(_abbreviate_legal_suffix)
-    nit_df = nit_df.assign(RAZON_SOCIAL=razon)
+    nit_df = nit_df.assign(**{RAZON_SOCIAL: razon})
 
-    value_cols = [c for c in nit_df.columns if c not in ("NIT", "RAZON_SOCIAL")]
+    value_cols = [c for c in nit_df.columns if c not in (NIT, RAZON_SOCIAL)]
 
     # Drop value columns whose total is zero (TOTAL row is last)
     keep_cols = [c for c in value_cols if c == _TOTAL_LABEL or nit_df[c].abs().sum() > ZERO_THRESHOLD]
@@ -700,22 +701,22 @@ def _render_nit_pivot(pdf: FinancialPDF, nit_df, year_label, *,
     if _TOTAL_LABEL in keep_cols:
         nit_df = nit_df.assign(**{_TOTAL_LABEL: nit_df[data_cols].sum(axis=1)})
     value_cols = keep_cols
-    nit_df = nit_df[["NIT", "RAZON_SOCIAL"] + value_cols]
+    nit_df = nit_df[[NIT, RAZON_SOCIAL] + value_cols]
 
     # Drop rows where all value columns are zero (except TOTAL row)
-    is_total = nit_df["RAZON_SOCIAL"].eq(_TOTAL_LABEL)
+    is_total = nit_df[RAZON_SOCIAL].eq(_TOTAL_LABEL)
     zero_mask = nit_df[value_cols].abs().sum(axis=1) <= ZERO_THRESHOLD
     nit_df = nit_df[~(zero_mask & ~is_total)].reset_index(drop=True)
 
     display_headers = [_shorten_nit_header(c) for c in value_cols]
 
     if drop_nit_col:
-        nit_df = nit_df.drop(columns=["NIT"])
-        label_cols = ["RAZON_SOCIAL"]
+        nit_df = nit_df.drop(columns=[NIT])
+        label_cols = [RAZON_SOCIAL]
         header_labels = ["RAZON SOCIAL"]
         label_pcts = [sum(NIT_LABEL_PCTS)]
     else:
-        label_cols = ["NIT", "RAZON_SOCIAL"]
+        label_cols = [NIT, RAZON_SOCIAL]
         header_labels = ["NIT", "RAZON SOCIAL"]
         label_pcts = NIT_LABEL_PCTS
 
@@ -749,9 +750,9 @@ def _render_nit_pivot(pdf: FinancialPDF, nit_df, year_label, *,
 def _render_pl_summary(pdf, data, col_names, n_vals, pl_label_pcts, subtitle_text, nota_map):
     """Render the P&L summary page."""
     pl_df = data.pl_summary.copy()
-    pl_df["NOTA"] = pl_df["PARTIDA_PL"].map(nota_map).fillna("-")
-    pl_df.loc[pl_df["PARTIDA_PL"].str.strip() == "", "NOTA"] = ""
-    pl_rows = _df_to_rows(pl_df, ["PARTIDA_PL", "NOTA"], col_names)
+    pl_df["NOTA"] = pl_df[PARTIDA_PL].map(nota_map).fillna("-")
+    pl_df.loc[pl_df[PARTIDA_PL].str.strip() == "", "NOTA"] = ""
+    pl_rows = _df_to_rows(pl_df, [PARTIDA_PL, "NOTA"], col_names)
 
     pdf.page_title = "Estado de Resultados"
     pdf.page_subtitle = subtitle_text
@@ -771,9 +772,9 @@ def _render_bs_summary(pdf, data, bs_col_names, n_bs_vals, subtitle_text, nota_m
     bs_widths, bs_val_w = _compute_widths(pdf, n_bs_vals, bs_label_pcts)
 
     bs_df = data.bs_summary.copy()
-    bs_df["NOTA"] = bs_df["PARTIDA_BS"].map(nota_map).fillna("-")
-    bs_df.loc[bs_df["PARTIDA_BS"].str.strip() == "", "NOTA"] = ""
-    bs_rows = _df_to_rows_bs(bs_df, ["PARTIDA_BS", "NOTA"], bs_col_names)
+    bs_df["NOTA"] = bs_df[PARTIDA_BS].map(nota_map).fillna("-")
+    bs_df.loc[bs_df[PARTIDA_BS].str.strip() == "", "NOTA"] = ""
+    bs_rows = _df_to_rows_bs(bs_df, [PARTIDA_BS, "NOTA"], bs_col_names)
 
     pdf.page_title = "Balance General"
     pdf.page_subtitle = subtitle_text
@@ -798,8 +799,8 @@ def _render_nota_bs_entry(pdf, entry, data, bs_col_names, n_bs_vals, bs_det_widt
     group_table = BS_GROUP_TABLES.get(entry.bs_key)
     if group_table is not None:
         bs_df = _aggregate_by_group(bs_df, bs_col_names, group_table)
-        label_cols = ["DESCRIPCION"]
-        header_labels = ["DESCRIPCION"]
+        label_cols = [DESCRIPCION]
+        header_labels = [DESCRIPCION]
         eff_widths = [sum(bs_det_widths)]
     else:
         label_cols = list(entry.pdf_label_cols)
@@ -821,13 +822,13 @@ def _render_nota_bs_entry(pdf, entry, data, bs_col_names, n_bs_vals, bs_det_widt
             )
             pdf.set_font("Helvetica", "", FONT_SIZE_DATA)
             col_w = nit_rank_widths[0] - LABEL_INDENT
-            nit_rank_df = nit_rank_df.assign(
-                RAZON_SOCIAL=nit_rank_df["RAZON_SOCIAL"].apply(
+            nit_rank_df = nit_rank_df.assign(**{
+                RAZON_SOCIAL: nit_rank_df[RAZON_SOCIAL].apply(
                     lambda s: _truncate_text(pdf, s, col_w) if isinstance(s, str) else s
                 )
-            )
+            })
             nit_rows = _drop_zero_rows(
-                _df_to_rows(nit_rank_df, ["RAZON_SOCIAL"], bs_col_names)
+                _df_to_rows(nit_rank_df, [RAZON_SOCIAL], bs_col_names)
             )
             if nit_rows:
                 _render_table(pdf, nit_rows, ["RAZON SOCIAL"], bs_col_names,
@@ -947,7 +948,7 @@ def export_to_pdf(output_path, data: PdfReportData):
     for attr in _PL_ATTRS:
         df = getattr(data, attr, None)
         if df is not None and not df.empty:
-            label_cols = _attr_label_cols.get(attr, ["DESCRIPCION"])
+            label_cols = _attr_label_cols.get(attr, [DESCRIPCION])
             r = _df_to_rows(df, label_cols, col_names)
             pl_row_cache[attr] = _drop_zero_rows(r)
 

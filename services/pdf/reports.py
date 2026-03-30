@@ -3,6 +3,10 @@ import logging
 import pandas as pd
 
 from config.calendar import MONTH_NAMES
+from config.fields import (
+    CUENTA_CONTABLE, DESCRIPCION, PARTIDA_PL, PARTIDA_BS,
+    CENTRO_COSTO, DESC_CECO, NIT, RAZON_SOCIAL, MES,
+)
 from config.period import get_end_month
 from models.models import PeriodContext
 from accounting.aggregation import (
@@ -72,7 +76,7 @@ def pl_summary_pdf(ctx: PeriodContext):
     col_names = build_column_names(ctx.period_type, ctx.period_num, ctx.year)
     pivot = aggregate_period(
         ctx.df_current, ctx.df_prev, ctx.period_type, ctx.period_num, ctx.year,
-        ["PARTIDA_PL"], col_names,
+        [PARTIDA_PL], col_names,
     )
     val_cols = list(col_names)
     lookup = build_partida_lookup(pivot, val_cols)
@@ -116,8 +120,8 @@ def bs_summary_pdf(df_bs_current, df_bs_prev, year, period_type, period_num,
     col_names = build_bs_column_names(year)
 
     return merge_current_prev(
-        bs_current, bs_prev, "PARTIDA_BS", col_names, keep_months,
-        ["PARTIDA_BS", col_names[0], col_names[1]],
+        bs_current, bs_prev, PARTIDA_BS, col_names, keep_months,
+        [PARTIDA_BS, col_names[0], col_names[1]],
     )
 
 
@@ -136,7 +140,7 @@ def bs_detail_by_cuenta_pdf(df_bs_current, df_bs_prev, year, period_type, period
     current = bs_detail_by_cuenta(
         df_bs_current, partidas, add_total_col=False, keep_months=keep_months,
         cuenta_prefixes=cuenta_prefixes, exclude_cuenta_prefixes=exclude_cuenta_prefixes,
-    ) if not df_bs_current.empty else pd.DataFrame(columns=["CUENTA_CONTABLE", "DESCRIPCION"])
+    ) if not df_bs_current.empty else pd.DataFrame(columns=[CUENTA_CONTABLE, DESCRIPCION])
 
     prev = bs_detail_by_cuenta(
         df_bs_prev, partidas, add_total_col=False, keep_months=keep_months,
@@ -144,14 +148,14 @@ def bs_detail_by_cuenta_pdf(df_bs_current, df_bs_prev, year, period_type, period
     ) if not df_bs_prev.empty else None
 
     merged = merge_current_prev(
-        current, prev, "CUENTA_CONTABLE", col_names, keep_months,
-        ["CUENTA_CONTABLE", "DESCRIPCION", col_names[0], col_names[1]],
+        current, prev, CUENTA_CONTABLE, col_names, keep_months,
+        [CUENTA_CONTABLE, DESCRIPCION, col_names[0], col_names[1]],
     )
     # Sort by current year descending
     merged = merged.sort_values(col_names[0], ascending=False).reset_index(drop=True)
 
     if with_total_row:
-        merged = append_total_row(merged, "DESCRIPCION")
+        merged = append_total_row(merged, DESCRIPCION)
 
     return merged
 
@@ -160,8 +164,8 @@ def _detail_pivot_pdf(ctx: PeriodContext, partidas, index_cols,
                       sort_col=None, ascending=False,
                       with_total_row: bool = False):
     """Filter to *partidas*, aggregate for PDF columns, sort."""
-    df_c = ctx.df_current[ctx.df_current["PARTIDA_PL"].isin(partidas)]
-    df_p = ctx.df_prev[ctx.df_prev["PARTIDA_PL"].isin(partidas)] if not ctx.df_prev.empty else ctx.df_prev
+    df_c = ctx.df_current[ctx.df_current[PARTIDA_PL].isin(partidas)]
+    df_p = ctx.df_prev[ctx.df_prev[PARTIDA_PL].isin(partidas)] if not ctx.df_prev.empty else ctx.df_prev
     col_names = build_column_names(ctx.period_type, ctx.period_num, ctx.year)
     pivot = aggregate_period(
         df_c, df_p, ctx.period_type, ctx.period_num, ctx.year,
@@ -180,7 +184,7 @@ def detail_by_ceco_pdf(ctx: PeriodContext, partidas, ascending=False,
     col_names = build_column_names(ctx.period_type, ctx.period_num, ctx.year)
     sort_col = _default_sort_col(col_names, ctx.period_type)
     return _detail_pivot_pdf(
-        ctx, partidas, ["CENTRO_COSTO", "DESC_CECO"],
+        ctx, partidas, [CENTRO_COSTO, DESC_CECO],
         sort_col=sort_col, ascending=ascending,
         with_total_row=with_total_row,
     )
@@ -191,7 +195,7 @@ def detail_by_cuenta_pdf(ctx: PeriodContext, partidas,
     col_names = build_column_names(ctx.period_type, ctx.period_num, ctx.year)
     sort_col = _default_sort_col(col_names, ctx.period_type)
     return _detail_pivot_pdf(
-        ctx, partidas, ["CUENTA_CONTABLE", "DESCRIPCION"],
+        ctx, partidas, [CUENTA_CONTABLE, DESCRIPCION],
         sort_col=sort_col, ascending=False,
         with_total_row=with_total_row,
     )
@@ -213,7 +217,7 @@ def proyectos_especiales_pdf(ctx: PeriodContext,
     col_names = build_column_names(ctx.period_type, ctx.period_num, ctx.year)
     sort_col = _default_sort_col(col_names, ctx.period_type)
     return _detail_pivot_pdf(
-        ctx, ["INGRESOS PROYECTOS"], ["NIT", "RAZON_SOCIAL"],
+        ctx, ["INGRESOS PROYECTOS"], [NIT, RAZON_SOCIAL],
         sort_col=sort_col, ascending=False,
         with_total_row=with_total_row,
     )
@@ -230,7 +234,7 @@ def bs_relacionadas_nit_pdf(df_bs, period_type, period_num, partida_fn):
         return pd.DataFrame()
     end_month = get_end_month(period_type, period_num)
     # MES column is numeric (1-12); keep months 1 through end_month
-    filtered = df_bs[df_bs["MES"] <= end_month]
+    filtered = df_bs[df_bs[MES] <= end_month]
     if filtered.empty:
         return pd.DataFrame()
     return partida_fn(filtered)
@@ -249,26 +253,26 @@ def bs_top_by_nit_pdf(df_bs_current, df_bs_prev, year, period_type, period_num,
 
     current = bs_top20_by_nit(
         df_bs_current, partidas, keep_months=keep_months, top_n=top_n,
-    ) if not df_bs_current.empty else pd.DataFrame(columns=["NIT", "RAZON_SOCIAL"])
+    ) if not df_bs_current.empty else pd.DataFrame(columns=[NIT, RAZON_SOCIAL])
 
     prev = bs_top20_by_nit(
         df_bs_prev, partidas, keep_months=keep_months, top_n=top_n,
     ) if not df_bs_prev.empty else None
 
     # Remove TOTAL rows before merge (we'll add one at the end on the merged result)
-    if not current.empty and "RAZON_SOCIAL" in current.columns:
-        current = current[current["RAZON_SOCIAL"] != "TOTAL"].reset_index(drop=True)
-    if prev is not None and not prev.empty and "RAZON_SOCIAL" in prev.columns:
-        prev = prev[prev["RAZON_SOCIAL"] != "TOTAL"].reset_index(drop=True)
+    if not current.empty and RAZON_SOCIAL in current.columns:
+        current = current[current[RAZON_SOCIAL] != "TOTAL"].reset_index(drop=True)
+    if prev is not None and not prev.empty and RAZON_SOCIAL in prev.columns:
+        prev = prev[prev[RAZON_SOCIAL] != "TOTAL"].reset_index(drop=True)
 
-    output_cols = ["NIT", "RAZON_SOCIAL", col_names[0], col_names[1]]
+    output_cols = [NIT, RAZON_SOCIAL, col_names[0], col_names[1]]
     merged = merge_current_prev(
-        current, prev, "NIT", col_names, keep_months, output_cols,
+        current, prev, NIT, col_names, keep_months, output_cols,
     )
 
     if merged.empty:
         return pd.DataFrame()
     merged = merged.sort_values(col_names[0], ascending=False).reset_index(drop=True)
-    merged = append_total_row(merged, "RAZON_SOCIAL")
+    merged = append_total_row(merged, RAZON_SOCIAL)
 
     return merged

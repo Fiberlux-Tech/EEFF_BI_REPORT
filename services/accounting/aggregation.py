@@ -4,6 +4,10 @@ from collections import namedtuple
 import pandas as pd
 
 from config.calendar import MONTH_NAMES, MONTH_NAMES_LIST, MONTH_NAMES_SET
+from config.fields import (
+    CUENTA_CONTABLE, DESCRIPCION, PARTIDA_PL, PARTIDA_BS,
+    CENTRO_COSTO, DESC_CECO, SALDO, MES, NIT, RAZON_SOCIAL,
+)
 from config.period import get_period_months, get_ytd_months
 from accounting.rules import INGRESO_FINANCIERO_PREFIX
 
@@ -18,8 +22,8 @@ ResultadoFinanciero = namedtuple("ResultadoFinanciero", ["ingresos", "gastos"])
 
 def pivot_by_month(df: pd.DataFrame, index_cols: list[str] | str, add_total: bool = False) -> pd.DataFrame:
     pivot = pd.pivot_table(
-        df, values="SALDO", index=index_cols,
-        columns="MES", aggfunc="sum", fill_value=0, observed=True, sort=False,
+        df, values=SALDO, index=index_cols,
+        columns=MES, aggfunc="sum", fill_value=0, observed=True, sort=False,
     )
     pivot.columns = [MONTH_NAMES[int(c)] for c in pivot.columns]
     pivot = pivot.reset_index()
@@ -39,16 +43,16 @@ def preaggregate(df: pd.DataFrame) -> pd.DataFrame:
     DESCRIPCION, MES) summing SALDO once.  Pass the result as *preagg* to
     detail functions to avoid repeated groupby work on the raw DataFrame.
     """
-    agg_cols = ["PARTIDA_PL", "CENTRO_COSTO", "DESC_CECO",
-                "CUENTA_CONTABLE", "DESCRIPCION", "MES"]
-    return df.groupby(agg_cols, sort=False, as_index=False, observed=True)["SALDO"].sum()
+    agg_cols = [PARTIDA_PL, CENTRO_COSTO, DESC_CECO,
+                CUENTA_CONTABLE, DESCRIPCION, MES]
+    return df.groupby(agg_cols, sort=False, as_index=False, observed=True)[SALDO].sum()
 
 
 def _detail_pivot(df: pd.DataFrame, partidas: list[str], index_cols: list[str],
                   sort_by: str | list[str] = TOTAL_COL, ascending: bool = False,
                   with_total_row: bool = False, preagg: pd.DataFrame | None = None) -> pd.DataFrame:
     source = preagg if preagg is not None else df
-    source = source[source["PARTIDA_PL"].isin(partidas)]
+    source = source[source[PARTIDA_PL].isin(partidas)]
     pivot = pivot_by_month(source, index_cols, add_total=True)
     pivot = pivot.sort_values(sort_by, ascending=ascending).reset_index(drop=True)
     if with_total_row:
@@ -70,7 +74,7 @@ def append_total_row(pivot: pd.DataFrame, label_col: str) -> pd.DataFrame:
 def detail_by_ceco(df: pd.DataFrame, partidas: list[str], ascending: bool = False,
                    with_total_row: bool = False, preagg: pd.DataFrame | None = None) -> pd.DataFrame:
     """Filter to *partidas* and pivot by CENTRO_COSTO + DESC_CECO."""
-    return _detail_pivot(df, partidas, ["CENTRO_COSTO", "DESC_CECO"],
+    return _detail_pivot(df, partidas, [CENTRO_COSTO, DESC_CECO],
                          ascending=ascending, with_total_row=with_total_row, preagg=preagg)
 
 
@@ -79,15 +83,15 @@ def detail_ceco_by_cuenta(df: pd.DataFrame, partidas: list[str],
     """Filter to *partidas* and pivot by CECO x CUENTA_CONTABLE (expanded view)."""
     return _detail_pivot(
         df, partidas,
-        ["CENTRO_COSTO", "DESC_CECO", "CUENTA_CONTABLE", "DESCRIPCION"],
-        sort_by=["CENTRO_COSTO", "CUENTA_CONTABLE"], ascending=True, preagg=preagg,
+        [CENTRO_COSTO, DESC_CECO, CUENTA_CONTABLE, DESCRIPCION],
+        sort_by=[CENTRO_COSTO, CUENTA_CONTABLE], ascending=True, preagg=preagg,
     )
 
 
 def detail_by_cuenta(df: pd.DataFrame, partidas: list[str],
                      preagg: pd.DataFrame | None = None) -> pd.DataFrame:
     """Filter to *partidas* and pivot by CUENTA_CONTABLE + DESCRIPCION."""
-    return _detail_pivot(df, partidas, ["CUENTA_CONTABLE", "DESCRIPCION"], preagg=preagg)
+    return _detail_pivot(df, partidas, [CUENTA_CONTABLE, DESCRIPCION], preagg=preagg)
 
 
 def split_resultado_financiero(res_fin_df: pd.DataFrame, sort_col: str = TOTAL_COL) -> ResultadoFinanciero:
@@ -104,12 +108,12 @@ def split_resultado_financiero(res_fin_df: pd.DataFrame, sort_col: str = TOTAL_C
     -------
     ResultadoFinanciero(ingresos, gastos) with TOTAL rows appended.
     """
-    mask_77 = res_fin_df["CUENTA_CONTABLE"].str.startswith(INGRESO_FINANCIERO_PREFIX)
+    mask_77 = res_fin_df[CUENTA_CONTABLE].str.startswith(INGRESO_FINANCIERO_PREFIX)
     ingresos = append_total_row(
-        res_fin_df[mask_77].reset_index(drop=True), "DESCRIPCION",
+        res_fin_df[mask_77].reset_index(drop=True), DESCRIPCION,
     )
     gastos = append_total_row(
-        res_fin_df[~mask_77].reset_index(drop=True), "DESCRIPCION",
+        res_fin_df[~mask_77].reset_index(drop=True), DESCRIPCION,
     )
     return ResultadoFinanciero(ingresos=ingresos, gastos=gastos)
 
@@ -124,7 +128,7 @@ def detail_resultado_financiero(df: pd.DataFrame,
 def sales_details(df: pd.DataFrame, with_total_row: bool = False,
                   preagg: pd.DataFrame | None = None) -> pd.DataFrame:
     """Pivot INGRESOS ORDINARIOS by CUENTA_CONTABLE + DESCRIPCION."""
-    return _detail_pivot(df, ["INGRESOS ORDINARIOS"], ["CUENTA_CONTABLE", "DESCRIPCION"],
+    return _detail_pivot(df, ["INGRESOS ORDINARIOS"], [CUENTA_CONTABLE, DESCRIPCION],
                          with_total_row=with_total_row, preagg=preagg)
 
 
@@ -162,15 +166,15 @@ def bs_detail_by_cuenta(df: pd.DataFrame, partidas: list[str], *,
     When *cuenta_prefixes* is provided, only accounts starting with those prefixes are included.
     When *exclude_cuenta_prefixes* is provided, accounts starting with those prefixes are excluded.
     """
-    filtered = df[df["PARTIDA_BS"].isin(partidas)]
+    filtered = df[df[PARTIDA_BS].isin(partidas)]
     if cuenta_prefixes is not None:
-        filtered = filtered[filtered["CUENTA_CONTABLE"].str.startswith(cuenta_prefixes)]
+        filtered = filtered[filtered[CUENTA_CONTABLE].str.startswith(cuenta_prefixes)]
     if exclude_cuenta_prefixes is not None:
-        filtered = filtered[~filtered["CUENTA_CONTABLE"].str.startswith(exclude_cuenta_prefixes)]
-    pivot = pivot_by_month(filtered, ["CUENTA_CONTABLE", "DESCRIPCION"], add_total=False)
+        filtered = filtered[~filtered[CUENTA_CONTABLE].str.startswith(exclude_cuenta_prefixes)]
+    pivot = pivot_by_month(filtered, [CUENTA_CONTABLE, DESCRIPCION], add_total=False)
     pivot, mes_cols, display_cols = _apply_bs_cumsum(pivot, keep_months)
     # Sort by last displayed month's cumulative value
-    sort_col = display_cols[-1] if display_cols else "CUENTA_CONTABLE"
+    sort_col = display_cols[-1] if display_cols else CUENTA_CONTABLE
     if add_total_col:
         pivot[TOTAL_COL] = pivot[mes_cols].iloc[:, -1] if mes_cols else 0
         sort_col = TOTAL_COL
@@ -192,19 +196,19 @@ def bs_top20_by_nit(df: pd.DataFrame, partidas: list[str], *,
     ranks by the last displayed month column (descending), takes top N,
     and appends a TOTAL row.
     """
-    filtered = df[df["PARTIDA_BS"].isin(partidas)]
+    filtered = df[df[PARTIDA_BS].isin(partidas)]
     if filtered.empty:
         return pd.DataFrame()
 
     filtered = filtered.copy()
-    filtered["NIT"] = filtered["NIT"].fillna("SIN NIT")
-    filtered["RAZON_SOCIAL"] = filtered["RAZON_SOCIAL"].fillna("SIN RAZON SOCIAL")
+    filtered[NIT] = filtered[NIT].fillna("SIN NIT")
+    filtered[RAZON_SOCIAL] = filtered[RAZON_SOCIAL].fillna("SIN RAZON SOCIAL")
 
-    pivot = pivot_by_month(filtered, ["NIT", "RAZON_SOCIAL"], add_total=False)
+    pivot = pivot_by_month(filtered, [NIT, RAZON_SOCIAL], add_total=False)
     pivot, mes_cols, display_cols = _apply_bs_cumsum(pivot, keep_months)
 
     # Sort by raw value of last displayed month (descending — largest positive first)
-    sort_col = display_cols[-1] if display_cols else "NIT"
+    sort_col = display_cols[-1] if display_cols else NIT
     pivot = pivot.sort_values(sort_col, ascending=False).reset_index(drop=True)
 
     # Take top N
@@ -216,7 +220,7 @@ def bs_top20_by_nit(df: pd.DataFrame, partidas: list[str], *,
         pivot = pivot.drop(columns=drop_cols)
 
     # Append TOTAL row
-    pivot = append_total_row(pivot, "RAZON_SOCIAL")
+    pivot = append_total_row(pivot, RAZON_SOCIAL)
 
     return pivot
 
@@ -229,20 +233,20 @@ def _bs_relacionadas_by_nit(df: pd.DataFrame, partida: str) -> pd.DataFrame:
     Values are the total SALDO for each NIT / CUENTA combination.
     A TOTAL column and TOTAL row are appended.
     """
-    filtered = df[df["PARTIDA_BS"] == partida]
+    filtered = df[df[PARTIDA_BS] == partida]
     if filtered.empty:
         return pd.DataFrame()
-    agg = filtered.groupby(["NIT", "RAZON_SOCIAL", "DESCRIPCION"], as_index=False)["SALDO"].sum()
-    pivot = agg.pivot_table(index=["NIT", "RAZON_SOCIAL"], columns="DESCRIPCION",
-                            values="SALDO", aggfunc="sum", fill_value=0)
+    agg = filtered.groupby([NIT, RAZON_SOCIAL, DESCRIPCION], as_index=False)[SALDO].sum()
+    pivot = agg.pivot_table(index=[NIT, RAZON_SOCIAL], columns=DESCRIPCION,
+                            values=SALDO, aggfunc="sum", fill_value=0)
     pivot = pivot.reset_index()
     pivot.columns.name = None
     # Add TOTAL column
-    value_cols = [c for c in pivot.columns if c not in ("NIT", "RAZON_SOCIAL")]
+    value_cols = [c for c in pivot.columns if c not in (NIT, RAZON_SOCIAL)]
     pivot[TOTAL_COL] = pivot[value_cols].sum(axis=1)
     pivot = pivot.sort_values(TOTAL_COL, ascending=False).reset_index(drop=True)
     # Add TOTAL row
-    pivot = append_total_row(pivot, "RAZON_SOCIAL")
+    pivot = append_total_row(pivot, RAZON_SOCIAL)
     return pivot
 
 
@@ -259,8 +263,8 @@ def bs_cxp_relacionadas_by_nit(df: pd.DataFrame) -> pd.DataFrame:
 def proyectos_especiales(df: pd.DataFrame, mes_cols: list[str],
                          with_total_row: bool = False) -> pd.DataFrame:
     """Pivot INGRESOS PROYECTOS by NIT + RAZON_SOCIAL, ensuring all *mes_cols* present."""
-    df = df[df["PARTIDA_PL"] == "INGRESOS PROYECTOS"]
-    pivot = pivot_by_month(df, ["NIT", "RAZON_SOCIAL"])
+    df = df[df[PARTIDA_PL] == "INGRESOS PROYECTOS"]
+    pivot = pivot_by_month(df, [NIT, RAZON_SOCIAL])
     # Union of caller's months and pivot's own months to avoid silent dropping
     pivot_months = {c for c in pivot.columns if c in MONTH_NAMES_SET}
     all_months = sorted(set(mes_cols) | pivot_months, key=MONTH_NAMES_LIST.index)
@@ -268,10 +272,10 @@ def proyectos_especiales(df: pd.DataFrame, mes_cols: list[str],
         if col not in pivot.columns:
             pivot[col] = 0
     pivot[TOTAL_COL] = pivot[all_months].sum(axis=1)
-    pivot = pivot[["NIT", "RAZON_SOCIAL"] + all_months + [TOTAL_COL]]
+    pivot = pivot[[NIT, RAZON_SOCIAL] + all_months + [TOTAL_COL]]
     pivot = pivot.sort_values(TOTAL_COL, ascending=False).reset_index(drop=True)
     if with_total_row:
-        pivot = append_total_row(pivot, "RAZON_SOCIAL")
+        pivot = append_total_row(pivot, RAZON_SOCIAL)
     return pivot
 
 
@@ -285,14 +289,14 @@ def sum_for_months(df: pd.DataFrame, index_cols: list[str],
     even when *df* is empty, so that ``pd.DataFrame({...})`` built from
     multiple calls keeps the index columns aligned.
     """
-    filtered = df[df["MES"].isin(months)] if not df.empty else df
+    filtered = df[df[MES].isin(months)] if not df.empty else df
     if filtered.empty:
         if len(index_cols) == 1:
             idx = pd.Index([], name=index_cols[0])
         else:
             idx = pd.MultiIndex.from_tuples([], names=index_cols)
         return pd.Series(dtype=float, index=idx)
-    return filtered.groupby(index_cols, observed=True)["SALDO"].sum()
+    return filtered.groupby(index_cols, observed=True)[SALDO].sum()
 
 
 def aggregate_period(df_current: pd.DataFrame, df_prev: pd.DataFrame,
