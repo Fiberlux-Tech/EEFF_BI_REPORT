@@ -1,0 +1,141 @@
+# Architecture
+
+## Monorepo Structure
+
+```
+FLXContabilidad/
+├── backend/              # Flask API server
+│   ├── app.py            # Flask app factory, sys.path setup, CORS, blueprint registration
+│   ├── auth.py           # SQLite-based session auth (login, logout, /me, rate limiting)
+│   ├── routes.py         # API endpoints (data loading, exports, downloads, drill-down)
+│   ├── manage.py         # CLI for user management (create, list, delete, reset-password)
+│   ├── gunicorn.conf.py  # Production WSGI server config
+│   ├── output/           # Generated Excel/PDF files
+│   └── logs/             # Access/error logs
+├── frontend/             # React + Vite + Tailwind
+│   ├── src/
+│   │   ├── App.tsx       # Root component (auth check → login or dashboard)
+│   │   ├── lib/api.ts    # Centralized HTTP client (cookies, error handling)
+│   │   ├── config/       # Constants, API endpoints
+│   │   ├── types/        # TypeScript interfaces
+│   │   ├── contexts/     # AuthContext (user state) + ReportContext (data/export state)
+│   │   ├── components/   # Shared components (ErrorBoundary)
+│   │   └── features/
+│   │       ├── auth/     # Login page + auth service
+│   │       └── dashboard/  # Sidebar, MainContent, FinancialTable, IngresosView
+│   └── dist/             # Production build (served by nginx)
+├── services/             # Python data pipeline
+│   ├── data_service.py   # Single-fetch service with in-memory cache (30-min TTL)
+│   ├── pipeline.py       # Orchestrator: fetch → transform → export Excel/PDF
+│   ├── cli.py            # Legacy CLI argument parser (kept for reference)
+│   ├── data/             # DB connection (pyodbc), SQL queries, file-based prev-year cache
+│   ├── accounting/       # Transforms, aggregation, P&L/BS statement builders, rules
+│   ├── excel/            # Multi-sheet Excel generation (openpyxl)
+│   ├── pdf/              # PDF generation (fpdf2) — cover, tables, notes
+│   ├── config/           # Settings, company metadata, calendar, exceptions, nota config
+│   └── images/           # Company logo assets for PDF reports
+├── config/               # Shared config (also accessible as services/config via sys.path)
+├── data/                 # Shared data layer (also accessible as services/data)
+├── models/               # Data model classes (PeriodContext, PnLReportData, PdfReportData)
+├── .env                  # Shared defaults
+├── .env.development      # Dev-specific overrides
+├── .env.production       # Production overrides
+├── requirements.txt      # Python dependencies
+└── docs/                 # This documentation
+```
+
+## Request Flow
+
+```
+Browser (http://10.100.50.4)
+    │
+    ▼
+Nginx (port 80)
+    ├── Static files → frontend/dist/
+    ├── /auth/*      → Gunicorn (port 5000) → Flask auth.py
+    └── /api/*       → Gunicorn (port 5000) → Flask routes.py → services/
+```
+
+## API Endpoints
+
+| Method | Endpoint                         | Description                              |
+|--------|----------------------------------|------------------------------------------|
+| GET    | /auth/me                         | Check session status                     |
+| POST   | /auth/login                      | Authenticate user                        |
+| POST   | /auth/logout                     | End session                              |
+| GET    | /api/companies                   | Company list with metadata               |
+| GET    | /api/health                      | Health check                             |
+| POST   | /api/data/load                   | Fetch + transform report data            |
+| POST   | /api/data/detail                 | Drill-down into journal entries           |
+| POST   | /api/export/excel                | Generate Excel report                    |
+| POST   | /api/export/pdf                  | Generate PDF report                      |
+| POST   | /api/export/all                  | Generate Excel + PDF                     |
+| GET    | /api/export/download/\<filename> | Download a generated file                |
+
+## Authentication
+- **Storage**: SQLite file (`backend/users.db`)
+- **Method**: Flask server-side sessions with secure cookies
+- **No signup page** — users are created via CLI: `python manage.py create-user`
+- **Session flow**: Login → cookie set → all requests include cookie → /auth/me verifies
+- **Rate limiting**: Failed logins are rate-limited per IP
+
+## Data Flow
+
+### Dashboard Load
+```
+POST /api/data/load { company: "FIBERLUX", year: 2026 }
+    │
+    ▼
+data_service.load_report_data()
+    ├── Check in-memory cache (30-min TTL) → return if fresh
+    │
+    ├── fetch_all_data() → concurrent SQL Server queries (ThreadPoolExecutor)
+    │   └── Returns: raw, raw_current_full, raw_prev, raw_bs, raw_bs_prev
+    │
+    ├── Transforms: prepare_pnl → filter_for_statements → assign_partida_pl → pl_summary
+    ├── BS: prepare_bs_stmt → bs_summary
+    ├── Revenue: preaggregate → sales_details, proyectos_especiales
+    │
+    ├── Cache: result dict + raw DataFrames + prepared BS (for later export reuse)
+    │
+    └── Response: { pl_summary, bs_summary, ingresos_ordinarios, ingresos_proyectos, months }
+```
+
+### Export Flow
+```
+POST /api/export/excel { company: "FIBERLUX", year: 2026 }
+    │
+    ▼
+_run_export()
+    ├── Attempt to reuse cached raw DataFrames from prior dashboard load
+    │   (eliminates redundant SQL Server round-trips)
+    │
+    ├── pipeline.run_report() → build_excel_data → export_to_excel → .xlsx
+    │                         → build_pdf_data  → export_to_pdf  → .pdf
+    │
+    └── Response: { excel: "filename.xlsx", pdf: "filename.pdf" }
+        │
+        ▼
+    Frontend opens: GET /api/export/download/filename.xlsx → send_file()
+```
+
+## Caching Strategy
+
+Three layers, each serving a different purpose:
+
+| Layer | Location | TTL | Purpose |
+|-------|----------|-----|---------|
+| **In-memory** | `data_service.py` | 30 min | Fast dashboard reloads without DB queries |
+| **Export reuse** | `data_service.py` (raw cache) | 30 min | Export skips DB if dashboard already loaded |
+| **File-based** | `data/.cache/` (CSV) | 30 days | Previous-year P&L/BS data (changes rarely) |
+
+All in-memory caches are keyed by `(company, year)` and protected by `threading.Lock`.
+
+## Infrastructure
+- **Server**: Ubuntu Linux at 10.100.50.4
+- **Process manager**: systemd (service: `flxcontabilidad.service`)
+- **WSGI server**: Gunicorn (3 sync workers, port 5000)
+- **Reverse proxy**: Nginx (port 80)
+- **Frontend build**: Vite (static files in `frontend/dist/`)
+- **Python**: 3.12 with venv
+- **Node**: For frontend build only (not needed at runtime)

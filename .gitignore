@@ -1,0 +1,14 @@
+venv/
+__pycache__/
+*.pyc
+.env
+.env.*
+!.env.example
+*.db
+backend/logs/
+output/
+frontend/node_modules/
+frontend/dist/
+.cache/
+*.egg-info/
+*.xlsx
