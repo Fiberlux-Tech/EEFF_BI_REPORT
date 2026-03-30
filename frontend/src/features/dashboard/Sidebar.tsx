@@ -38,6 +38,7 @@ function ExportButton({ onClick, disabled, svgPath, label }: {
         <button
             onClick={onClick}
             disabled={disabled}
+            aria-label={`Exportar ${label}`}
             className="w-full flex items-center px-3 py-1.5 text-sm rounded-md text-gray-300 hover:text-white hover:bg-gray-800/50 transition-colors disabled:opacity-50"
         >
             <svg className="w-4 h-4 mr-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -74,8 +75,9 @@ export default function Sidebar() {
             {/* Selectors */}
             <div className="p-4 space-y-3 border-b border-gray-700">
                 <div>
-                    <label className="block text-[10px] uppercase tracking-wider text-gray-400 mb-1">Empresa</label>
+                    <label htmlFor="company-select" className="block text-[10px] uppercase tracking-wider text-gray-400 mb-1">Empresa</label>
                     <select
+                        id="company-select"
                         value={selectedCompany}
                         onChange={e => setSelectedCompany(e.target.value)}
                         className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-blue-500"
@@ -87,8 +89,9 @@ export default function Sidebar() {
                     </select>
                 </div>
                 <div>
-                    <label className="block text-[10px] uppercase tracking-wider text-gray-400 mb-1">Ano</label>
+                    <label htmlFor="year-select" className="block text-[10px] uppercase tracking-wider text-gray-400 mb-1">Ano</label>
                     <select
+                        id="year-select"
                         value={selectedYear}
                         onChange={e => setSelectedYear(Number(e.target.value))}
                         className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-blue-500"
@@ -180,6 +183,7 @@ export default function Sidebar() {
                         onClick={logout}
                         className="text-xs text-gray-400 hover:text-white transition-colors"
                         title="Cerrar Sesion"
+                        aria-label="Cerrar Sesion"
                     >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />

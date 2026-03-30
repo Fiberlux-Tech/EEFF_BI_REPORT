@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { useReducer, useRef, useEffect, useMemo, useCallback } from 'react';
 import { api } from '@/lib/api';
 import { API_CONFIG } from '@/config';
 import { useReport } from '@/contexts/ReportContext';
@@ -46,7 +46,7 @@ function DetailDataTable({ detailRows, filteredRows, filters, updateFilter, page
                     <thead>
                         <tr className="bg-gray-700 text-white">
                             {DETAIL_COLS.map(col => (
-                                <th key={col} className={`px-3 py-2 font-medium whitespace-nowrap ${col === 'SALDO' ? 'text-right' : 'text-left'}`}>
+                                <th scope="col" key={col} className={`px-3 py-2 font-medium whitespace-nowrap ${col === 'SALDO' ? 'text-right' : 'text-left'}`}>
                                     {DETAIL_HEADERS[col]}
                                 </th>
                             ))}
@@ -135,15 +135,57 @@ interface PLNoteViewProps {
     year: number;
 }
 
+interface DetailState {
+    selection: CellSelection | null;
+    detailRows: ReportRow[];
+    isLoadingDetail: boolean;
+    detailError: string | null;
+    page: number;
+    pageSize: number;
+    filters: Record<string, string>;
+}
+
+type DetailAction =
+    | { type: 'SELECT'; selection: CellSelection }
+    | { type: 'CLEAR_SELECTION' }
+    | { type: 'LOAD_SUCCESS'; rows: ReportRow[] }
+    | { type: 'LOAD_ERROR'; error: string }
+    | { type: 'SET_PAGE'; page: number }
+    | { type: 'SET_PAGE_SIZE'; size: number }
+    | { type: 'SET_FILTER'; col: string; value: string };
+
+const detailInitialState: DetailState = {
+    selection: null,
+    detailRows: [],
+    isLoadingDetail: false,
+    detailError: null,
+    page: 0,
+    pageSize: DEFAULT_PAGE_SIZE,
+    filters: {},
+};
+
+function detailReducer(state: DetailState, action: DetailAction): DetailState {
+    switch (action.type) {
+        case 'SELECT':
+            return { ...detailInitialState, selection: action.selection, isLoadingDetail: true, pageSize: state.pageSize };
+        case 'CLEAR_SELECTION':
+            return { ...state, selection: null, detailRows: [] };
+        case 'LOAD_SUCCESS':
+            return { ...state, isLoadingDetail: false, detailRows: action.rows };
+        case 'LOAD_ERROR':
+            return { ...state, isLoadingDetail: false, detailRows: [], detailError: action.error };
+        case 'SET_PAGE':
+            return { ...state, page: action.page };
+        case 'SET_PAGE_SIZE':
+            return { ...state, pageSize: action.size, page: 0 };
+        case 'SET_FILTER':
+            return { ...state, filters: { ...state.filters, [action.col]: action.value }, page: 0 };
+    }
+}
+
 export default function PLNoteView({ tables, months, year }: PLNoteViewProps) {
     const { selectedCompany, selectedYear } = useReport();
-    const [selection, setSelection] = useState<CellSelection | null>(null);
-    const [detailRows, setDetailRows] = useState<ReportRow[]>([]);
-    const [isLoadingDetail, setIsLoadingDetail] = useState(false);
-    const [detailError, setDetailError] = useState<string | null>(null);
-    const [page, setPage] = useState(0);
-    const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
-    const [filters, setFilters] = useState<Record<string, string>>({});
+    const [state, dispatch] = useReducer(detailReducer, detailInitialState);
     const detailRef = useRef<HTMLDivElement>(null);
 
     const companyRef = useRef(selectedCompany);
@@ -152,28 +194,22 @@ export default function PLNoteView({ tables, months, year }: PLNoteViewProps) {
     useEffect(() => { yearRef.current = selectedYear; }, [selectedYear]);
 
     const filteredRows = useMemo(() => {
-        const activeFilters = Object.entries(filters).filter(([, v]) => v.length > 0);
-        if (activeFilters.length === 0) return detailRows;
-        return detailRows.filter(row =>
+        const activeFilters = Object.entries(state.filters).filter(([, v]) => v.length > 0);
+        if (activeFilters.length === 0) return state.detailRows;
+        return state.detailRows.filter(row =>
             activeFilters.every(([col, term]) => {
                 const val = String(row[col] ?? '').toLowerCase();
                 return val.includes(term.toLowerCase());
             })
         );
-    }, [detailRows, filters]);
+    }, [state.detailRows, state.filters]);
 
     const updateFilter = (col: string, value: string) => {
-        setFilters(prev => ({ ...prev, [col]: value }));
-        setPage(0);
+        dispatch({ type: 'SET_FILTER', col, value });
     };
 
     const handleCellClick = useCallback(async (sel: CellSelection) => {
-        setSelection(sel);
-        setIsLoadingDetail(true);
-        setDetailRows([]);
-        setDetailError(null);
-        setPage(0);
-        setFilters({});
+        dispatch({ type: 'SELECT', selection: sel });
 
         try {
             const body: Record<string, unknown> = {
@@ -187,23 +223,20 @@ export default function PLNoteView({ tables, months, year }: PLNoteViewProps) {
                 body.filter_val = sel.filterVal;
             }
             const resp = await api.post<{ records: ReportRow[] }>(API_CONFIG.ENDPOINTS.DATA_DETAIL, body);
-            setDetailRows(resp.records);
+            dispatch({ type: 'LOAD_SUCCESS', rows: resp.records });
         } catch (err) {
-            setDetailRows([]);
-            setDetailError(err instanceof Error ? err.message : 'Error al cargar detalle');
-        } finally {
-            setIsLoadingDetail(false);
+            dispatch({ type: 'LOAD_ERROR', error: err instanceof Error ? err.message : 'Error al cargar detalle' });
         }
     }, []);
 
     useEffect(() => {
-        if (selection && detailRef.current) {
+        if (state.selection && detailRef.current) {
             detailRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
-    }, [selection, detailRows]);
+    }, [state.selection, state.detailRows]);
 
     const renderDetailContent = () => {
-        if (isLoadingDetail) {
+        if (state.isLoadingDetail) {
             return (
                 <div className="flex items-center justify-center py-8">
                     <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mr-3"></div>
@@ -211,22 +244,22 @@ export default function PLNoteView({ tables, months, year }: PLNoteViewProps) {
                 </div>
             );
         }
-        if (detailError) {
-            return <div className="text-center py-6 text-sm text-red-500">{detailError}</div>;
+        if (state.detailError) {
+            return <div className="text-center py-6 text-sm text-red-500">{state.detailError}</div>;
         }
-        if (detailRows.length === 0) {
+        if (state.detailRows.length === 0) {
             return <div className="text-center py-6 text-sm text-gray-400">Sin registros</div>;
         }
         return (
             <DetailDataTable
-                detailRows={detailRows}
+                detailRows={state.detailRows}
                 filteredRows={filteredRows}
-                filters={filters}
+                filters={state.filters}
                 updateFilter={updateFilter}
-                page={page}
-                setPage={setPage}
-                pageSize={pageSize}
-                setPageSize={setPageSize}
+                page={state.page}
+                setPage={(fn) => dispatch({ type: 'SET_PAGE', page: fn(state.page) })}
+                pageSize={state.pageSize}
+                setPageSize={(size) => dispatch({ type: 'SET_PAGE_SIZE', size })}
             />
         );
     };
@@ -239,19 +272,19 @@ export default function PLNoteView({ tables, months, year }: PLNoteViewProps) {
                     {...table}
                     months={months}
                     year={year}
-                    selection={selection}
+                    selection={state.selection}
                     onCellClick={handleCellClick}
                 />
             ))}
 
-            {selection && (
+            {state.selection && (
                 <div ref={detailRef}>
                     <div className="flex items-center justify-between mb-2">
                         <h3 className="text-base font-semibold text-gray-700">
-                            Detalle: {selection.label}
+                            Detalle: {state.selection.label}
                         </h3>
                         <button
-                            onClick={() => { setSelection(null); setDetailRows([]); }}
+                            onClick={() => dispatch({ type: 'CLEAR_SELECTION' })}
                             className="text-xs text-gray-400 hover:text-gray-600 px-2 py-1 rounded hover:bg-gray-100"
                         >
                             Cerrar

@@ -41,11 +41,11 @@ export default function FinancialTable({ rows, months, labelKey, showTotal = fal
             <table className="min-w-full text-xs">
                 <thead>
                     <tr className="bg-gray-800 text-white">
-                        <th className="sticky left-0 bg-gray-800 z-10 px-3 py-2 text-left font-medium min-w-[220px]">
+                        <th scope="col" className="sticky left-0 bg-gray-800 z-10 px-3 py-2 text-left font-medium min-w-[220px]">
                             PARTIDA
                         </th>
                         {valueCols.map(col => (
-                            <th key={col} className="px-2 py-2 text-right font-medium whitespace-nowrap min-w-[85px]">
+                            <th scope="col" key={col} className="px-2 py-2 text-right font-medium whitespace-nowrap min-w-[85px]">
                                 {col}
                             </th>
                         ))}

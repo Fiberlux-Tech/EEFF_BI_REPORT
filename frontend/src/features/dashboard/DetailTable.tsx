@@ -20,13 +20,14 @@ export default function DetailTable({ title, rows, labelKeys, headerLabels, mont
                     <thead>
                         <tr className="bg-gray-800 text-white">
                             <th
+                                scope="col"
                                 colSpan={labelKeys.length}
                                 className="sticky left-0 z-10 bg-gray-800 px-3 py-2 text-left font-medium whitespace-nowrap min-w-[300px]"
                             >
                                 {headerLabels.join(' / ')}
                             </th>
                             {valueHeaders.map((col, i) => (
-                                <th key={col} className={`px-2 py-2 text-right font-medium whitespace-nowrap min-w-[85px] ${i === valueHeaders.length - 1 ? 'font-bold' : ''}`}>
+                                <th scope="col" key={col} className={`px-2 py-2 text-right font-medium whitespace-nowrap min-w-[85px] ${i === valueHeaders.length - 1 ? 'font-bold' : ''}`}>
                                     {col}
                                 </th>
                             ))}
