@@ -26,35 +26,224 @@
 }
 
 @layer components {
-  /* ─── Sticky column shadow ─── */
-  .sticky-col {
+
+  /* ═══════════════════════════════════════════════════════════════
+     RPT — Executive Report table design system
+     Used across ALL table components (Financial, Detail, Expandable, Planilla)
+     ═══════════════════════════════════════════════════════════════ */
+
+  /* ─── Base table ─── */
+  .rpt-table {
+    @apply w-full border-collapse;
+    table-layout: fixed;
+  }
+  .rpt-table-auto {
+    @apply w-full border-collapse;
+    table-layout: auto;
+  }
+
+  /* ─── Table headers ─── */
+  .rpt-table th,
+  .rpt-table-auto th {
+    @apply text-[10px] font-semibold uppercase text-right whitespace-nowrap;
+    color: #999;
+    letter-spacing: 1px;
+    padding: 0 8px 14px;
+    border-bottom: 1px solid #ddd;
+  }
+  .rpt-table th:first-child,
+  .rpt-table-auto th:first-child {
+    @apply text-left;
+    padding-left: 0;
+    width: 380px;
+  }
+  .rpt-table th:last-child,
+  .rpt-table-auto th:last-child { padding-right: 0; }
+  .rpt-table th.rpt-col-total,
+  .rpt-table-auto th.rpt-col-total { color: #555; font-weight: 700; }
+
+  /* ─── Base cell defaults ─── */
+  .rpt-table td,
+  .rpt-table-auto td {
+    @apply text-right whitespace-nowrap;
+    font-size: 12px;
+    font-weight: 400;
+    color: #444;
+    padding: 10px 8px;
+    border-bottom: 1px dotted #e5e5e5;
+  }
+  .rpt-table td:first-child,
+  .rpt-table-auto td:first-child {
+    @apply text-left;
+    padding-left: 0;
+    white-space: normal;
+  }
+  .rpt-table td:last-child,
+  .rpt-table-auto td:last-child { padding-right: 0; }
+
+  /* ─── Value colors ─── */
+  .rpt-neg { color: #7F1D1D; }
+
+  /* ─── Highlight row (revenue, key summary) ─── */
+  .rpt-row-highlight td {
+    background: #FFF8F0;
+    font-size: 13px;
+    font-weight: 600;
+    color: #1a1a1a;
+    padding: 14px 8px;
+    border-bottom: none;
+  }
+  .rpt-row-highlight td:first-child { padding-left: 0; }
+
+  /* ─── Data row (default) ─── */
+  .rpt-row-data td {
+    font-size: 12px;
+    font-weight: 400;
+    color: #444;
+    padding: 10px 8px;
+    border-bottom: 1px dotted #e5e5e5;
+  }
+  .rpt-row-data td:first-child { padding-left: 0; }
+
+  /* ─── Bold row (subtotals: UTILIDAD BRUTA, etc.) ─── */
+  .rpt-row-bold td {
+    font-size: 13px;
+    font-weight: 600;
+    color: #1a1a1a;
+    padding: 12px 8px;
+    border-bottom: 1px dotted #ddd;
+    background: #F5F4F0;
+  }
+  .rpt-row-bold td:first-child { padding-left: 0; }
+
+  /* ─── Section row (BS section headers with no data) ─── */
+  .rpt-row-section td {
+    font-size: 12px;
+    font-weight: 500;
+    color: #666;
+    padding: 12px 8px;
+    border-bottom: 1px dotted #e5e5e5;
+  }
+  .rpt-row-section td:first-child { padding-left: 0; }
+
+  /* ─── L0: Top-level expandable (Partida) ─── */
+  .rpt-row-l0 td {
+    font-size: 13px;
+    font-weight: 600;
+    color: #1a1a1a;
+    padding: 12px 8px;
+    border-bottom: 1px dotted #ddd;
+  }
+  .rpt-row-l0 td:first-child { padding-left: 0; cursor: pointer; }
+  .rpt-row-l0 .rpt-chevron {
+    color: #999;
+    font-size: 10px;
+    margin-right: 6px;
+    display: inline-block;
+    width: 12px;
+  }
+
+  /* ─── L1: Sub-group (CECO / Cuenta category) ─── */
+  .rpt-row-l1 td {
+    font-size: 12px;
+    font-weight: 500;
+    color: #666;
+    padding: 9px 8px;
+    border-bottom: 1px dotted #e8e8e8;
+  }
+  .rpt-row-l1 td:first-child { padding-left: 24px; cursor: pointer; }
+  .rpt-row-l1 .rpt-chevron {
+    color: #bbb;
+    font-size: 9px;
+    margin-right: 5px;
+    display: inline-block;
+    width: 10px;
+  }
+
+  /* ─── L2: Detail level (Cuenta) ─── */
+  .rpt-row-l2 td {
+    font-size: 11px;
+    font-weight: 400;
+    color: #888;
+    padding: 7px 8px;
+    border-bottom: 1px dotted #efefef;
+  }
+  .rpt-row-l2 td:first-child { padding-left: 48px; }
+  .rpt-row-l2 .rpt-chevron {
+    color: #ccc;
+    font-size: 9px;
+    margin-right: 5px;
+    display: inline-block;
+    width: 10px;
+  }
+
+  /* ─── L3: Leaf level (deepest cuenta) ─── */
+  .rpt-row-l3 td {
+    font-size: 11px;
+    font-weight: 400;
+    color: #999;
+    padding: 7px 8px;
+    border-bottom: 1px dotted #f2f2f2;
+  }
+  .rpt-row-l3 td:first-child { padding-left: 72px; }
+
+  /* ─── Total row (double-rule accounting convention) ─── */
+  .rpt-row-total td {
+    font-size: 13px;
+    font-weight: 700;
+    color: #1a1a1a;
+    padding: 14px 8px 12px;
+    border-top: 3px double #333;
+    border-bottom: none;
+    background: #F5F4F0;
+  }
+  .rpt-row-total td:first-child { padding-left: 0; }
+
+  /* ─── Spacer row ─── */
+  .rpt-row-spacer td {
+    padding: 8px 0;
+    border-bottom: none;
+  }
+
+  /* ─── Clickable cells (for DetailTable drill-down) ─── */
+  .rpt-clickable {
+    cursor: pointer;
+    transition: color 0.15s;
+  }
+  .rpt-clickable:hover {
+    color: #7F1D1D !important;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  /* ─── Selected cell ─── */
+  .rpt-selected {
+    border-bottom: 2px solid #7F1D1D !important;
+    padding-bottom: 8px;
+  }
+
+  /* ─── Separator (decorative centered label) ─── */
+  .rpt-separator {
+    @apply flex items-center gap-4 my-14;
+  }
+  .rpt-separator .sep-line {
+    @apply flex-1 h-px bg-border;
+  }
+  .rpt-separator .sep-label {
+    @apply text-[10px] font-semibold uppercase whitespace-nowrap;
+    color: #aaa;
+    letter-spacing: 2px;
+  }
+
+  /* ─── Sticky first column ─── */
+  .rpt-sticky {
     @apply sticky left-0 z-10;
-    box-shadow: 4px 0 8px -3px rgba(0,0,0,0.04);
+    background: white;
   }
 
-  /* ─── Table container ─── */
-  .table-card {
-    @apply border border-border rounded-[10px] overflow-hidden;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
-  }
-
-  /* ─── Table header ─── */
-  .thead-row  { @apply bg-surface-alt border-b border-border; }
-  .thead-cell { @apply px-3.5 py-2.5 font-semibold whitespace-nowrap text-[11px] uppercase tracking-[0.5px] text-txt-muted; }
-
-  /* ─── Table rows ─── */
-  .row-base  { @apply border-b border-border-light transition-colors hover:bg-surface-alt; }
-  .row-total { @apply bg-surface-alt font-semibold border-t-2 border-t-border border-b-0; }
-
-  /* ─── Table cells ─── */
-  .cell-base      { @apply px-3.5 py-2 text-right whitespace-nowrap font-mono; }
-  .cell-neg       { @apply text-negative; }
-  .cell-zero      { @apply text-txt-faint; }
-  .cell-normal    { @apply text-txt-secondary; }
-  .cell-bold      { @apply font-semibold text-txt; }
-  .cell-clickable { @apply cursor-pointer hover:bg-accent-light hover:text-accent; }
-  .cell-selected  { @apply bg-accent-light ring-1 ring-accent-ring ring-inset; }
-  .cell-total-col { @apply border-l border-border bg-col-total font-semibold text-txt; }
+  /* ═══════════════════════════════════════════════════════════════
+     Non-table components (kept as-is)
+     ═══════════════════════════════════════════════════════════════ */
 
   /* ─── Filter input ─── */
   .filter-input {
@@ -69,13 +258,6 @@
            text-txt-muted hover:bg-surface-alt hover:text-txt-secondary
            disabled:opacity-40 disabled:cursor-not-allowed transition-colors;
   }
-  .btn-export-green {
-    @apply inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium
-           bg-positive text-white rounded-md
-           disabled:opacity-40 disabled:cursor-not-allowed transition-colors;
-  }
-  .btn-export-green:hover:not(:disabled) { filter: brightness(0.9); }
-
   /* ─── Toggle group ─── */
   .toggle-group    { @apply inline-flex rounded-md overflow-hidden border border-border bg-surface-alt; }
   .toggle-btn      { @apply px-3.5 py-1.5 text-xs font-medium transition-all whitespace-nowrap; }
@@ -97,10 +279,6 @@
     padding-right: 28px;
   }
   .select-base:hover { border-color: #ccc; }
-
-  /* ─── Section title with badge ─── */
-  .section-title { @apply text-[15px] font-semibold text-txt mb-2.5 flex items-center gap-2; }
-  .section-badge { @apply text-[10px] font-semibold text-txt-muted bg-surface-alt border border-border rounded-full px-2 py-0.5; }
 
   /* ─── Nav items ─── */
   .nav-item-base {

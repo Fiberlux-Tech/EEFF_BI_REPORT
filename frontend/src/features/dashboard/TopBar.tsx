@@ -1,6 +1,7 @@
 import { useReport } from '@/contexts/ReportContext';
 import { VIEW_TITLE_MAP } from '@/config/viewConfigs';
 import { useViewExport } from './useViewExport';
+import ExportButton from '@/components/ExportButton';
 
 function ToggleGroup({ value, options, onChange }: {
     value: string;
@@ -152,19 +153,7 @@ export default function TopBar() {
                         </button>
 
                         {/* Export current view to Excel */}
-                        <button
-                            onClick={handleExport}
-                            disabled={!canExport}
-                            className="btn-icon"
-                            title="Exportar vista actual a Excel"
-                        >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path
-                                    strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                                    d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                                />
-                            </svg>
-                        </button>
+                        <ExportButton variant="excel" onClick={handleExport} disabled={!canExport} />
                     </div>
                 </div>
             </div>

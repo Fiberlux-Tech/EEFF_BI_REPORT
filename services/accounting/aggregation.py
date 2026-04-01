@@ -94,6 +94,26 @@ def detail_by_cuenta(df: pd.DataFrame, partidas: list[str],
     return _detail_pivot(df, partidas, [CUENTA_CONTABLE, DESCRIPCION], preagg=preagg)
 
 
+def detail_planilla(df: pd.DataFrame,
+                    preagg: pd.DataFrame | None = None) -> pd.DataFrame:
+    """Pivot ALL partidas for 'planilla' accounts (CUENTA_CONTABLE prefix '62')
+    by PARTIDA_PL x CENTRO_COSTO x DESC_CECO x CUENTA_CONTABLE x DESCRIPCION.
+
+    Returns a flat DataFrame with month columns + TOTAL, sorted by
+    PARTIDA_PL then CENTRO_COSTO then CUENTA_CONTABLE.
+    """
+    source = preagg if preagg is not None else df
+    source = source[source[CUENTA_CONTABLE].str.startswith("62")]
+    if source.empty:
+        return pd.DataFrame()
+    index_cols = [PARTIDA_PL, CENTRO_COSTO, DESC_CECO,
+                  CUENTA_CONTABLE, DESCRIPCION]
+    pivot = pivot_by_month(source, index_cols, add_total=True)
+    return pivot.sort_values(
+        [PARTIDA_PL, CENTRO_COSTO, CUENTA_CONTABLE], ascending=True,
+    ).reset_index(drop=True)
+
+
 def split_resultado_financiero(res_fin_df: pd.DataFrame, sort_col: str = TOTAL_COL) -> ResultadoFinanciero:
     """Split a RESULTADO FINANCIERO DataFrame into ingresos (prefix '77') and gastos.
 

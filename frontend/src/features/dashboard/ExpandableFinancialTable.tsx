@@ -139,7 +139,7 @@ function sumRows(rows: ReportRow[], columns: DisplayColumn[]): Record<string, nu
     return sums;
 }
 
-// ── CECO group building (COSTO only, derived from costoByCuenta) ─────
+// ── CECO group building (COSTO only) ─────────────────────────────────
 
 interface CecoGroup {
     label: string;
@@ -171,14 +171,42 @@ function buildCecoGroups(costoByCuenta: ReportRow[], columns: DisplayColumn[]): 
 
 // ── Which PARTIDA_PL rows are expandable and how ─────────────────────
 
-/** COSTO uses the CECO → Cuenta Category → Cuenta hierarchy */
 const CECO_EXPANDABLE = new Set(['COSTO']);
-
-/** These use the simpler Cuenta Category → Cuenta hierarchy (no CECO) */
 const CUENTA_EXPANDABLE = new Set([
     'GASTO VENTA', 'GASTO ADMIN', 'D&A - COSTO', 'D&A - GASTO',
     'OTROS INGRESOS', 'OTROS EGRESOS', 'PARTICIPACION DE TRABAJADORES', 'PROVISION INCOBRABLE',
 ]);
+
+// ── Helpers ──────────────────────────────────────────────────────────
+
+function negClass(val: number | null | undefined): string {
+    if (val !== null && val !== undefined && val < 0) return 'rpt-neg';
+    return '';
+}
+
+function NumCells({ row, columns }: { row: ReportRow; columns: DisplayColumn[] }) {
+    return (
+        <>
+            {columns.map(col => {
+                const val = getCellValue(row, col);
+                return (
+                    <td key={col.header} className={negClass(val)}>
+                        {formatNumber(val)}
+                    </td>
+                );
+            })}
+        </>
+    );
+}
+
+function TotalCell({ row, columns, variant }: { row: ReportRow; columns: DisplayColumn[]; variant?: 'pl' }) {
+    const total = variant === 'pl' ? getSummaryTotal(row, columns, 'pl') : (row['TOTAL'] as number | null ?? null);
+    return (
+        <td className={negClass(total)} style={{ fontWeight: 600 }}>
+            {formatNumber(total)}
+        </td>
+    );
+}
 
 // ── Component ────────────────────────────────────────────────────────
 
@@ -196,31 +224,11 @@ interface ExpandableFinancialTableProps {
     provisionByCuenta: ReportRow[];
 }
 
-function cellClass(val: number | null | undefined, isBold: boolean): string {
-    if (val === null || val === undefined) return 'cell-normal';
-    if (val === 0) return 'cell-zero';
-    if (val < 0) return 'cell-neg';
-    return isBold ? 'cell-bold' : 'cell-normal';
-}
-
-function Chevron({ expanded }: { expanded: boolean }) {
-    return (
-        <svg
-            className={`w-3.5 h-3.5 shrink-0 text-txt-muted transition-transform duration-150 ${expanded ? 'rotate-90' : ''}`}
-            fill="none" stroke="currentColor" viewBox="0 0 24 24"
-        >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-        </svg>
-    );
-}
-
 export default function ExpandableFinancialTable(props: ExpandableFinancialTableProps) {
     const { rows, columns, costoByCuenta, gastoVentaByCuenta, gastoAdminByCuenta, dyaCostoByCuenta, dyaGastoByCuenta, otrosIngresosByCuenta, otrosEgresosByCuenta, participacionByCuenta, provisionByCuenta } = props;
 
     const [expandedPartidas, setExpandedPartidas] = useState<Set<string>>(new Set());
     const [expandedCecoGroups, setExpandedCecoGroups] = useState<Set<string>>(new Set());
-    // "PARTIDA|groupOrPrefix" for cuenta categories inside CECO groups
-    // "PARTIDA|prefix" for cuenta categories directly under a partida
     const [expandedCuentaCats, setExpandedCuentaCats] = useState<Set<string>>(new Set());
     const [cuentaFilter, setCuentaFilter] = useState<string>('all');
 
@@ -229,7 +237,6 @@ export default function ExpandableFinancialTable(props: ExpandableFinancialTable
             const next = new Set(prev);
             if (next.has(partida)) {
                 next.delete(partida);
-                // Collapse all children
                 setExpandedCecoGroups(prev2 => {
                     const next2 = new Set(prev2);
                     for (const key of next2) if (key.startsWith(partida + '|')) next2.delete(key);
@@ -276,7 +283,6 @@ export default function ExpandableFinancialTable(props: ExpandableFinancialTable
 
     const isFiltered = cuentaFilter !== 'all';
 
-    // Get the by-cuenta data for a given partida
     const byCuentaMap: Record<string, ReportRow[]> = useMemo(() => ({
         'GASTO VENTA': gastoVentaByCuenta,
         'GASTO ADMIN': gastoAdminByCuenta,
@@ -288,13 +294,11 @@ export default function ExpandableFinancialTable(props: ExpandableFinancialTable
         'PROVISION INCOBRABLE': provisionByCuenta,
     }), [gastoVentaByCuenta, gastoAdminByCuenta, dyaCostoByCuenta, dyaGastoByCuenta, otrosIngresosByCuenta, otrosEgresosByCuenta, participacionByCuenta, provisionByCuenta]);
 
-    // Filter all cuenta data by selected prefix
     const filterCuenta = (rows: ReportRow[]): ReportRow[] => {
         if (!isFiltered) return rows;
         return rows.filter(r => String(r['CUENTA_CONTABLE'] ?? '').startsWith(cuentaFilter));
     };
 
-    // COSTO: filtered cuenta data → CECO groups
     const filteredCostoCuenta = useMemo(() => filterCuenta(costoByCuenta), [costoByCuenta, cuentaFilter]);
     const cecoGroups = useMemo(() => buildCecoGroups(filteredCostoCuenta, columns), [filteredCostoCuenta, columns]);
     const cuentaEntriesByCecoGroup = useMemo(() => {
@@ -305,7 +309,6 @@ export default function ExpandableFinancialTable(props: ExpandableFinancialTable
         return map;
     }, [cecoGroups, columns]);
 
-    // Simple expandable partidas: filtered cuenta → entries
     const cuentaEntriesByPartida = useMemo(() => {
         const map = new Map<string, { entries: CuentaEntry[]; filteredTotal: ReportRow }>();
         for (const partida of CUENTA_EXPANDABLE) {
@@ -318,17 +321,13 @@ export default function ExpandableFinancialTable(props: ExpandableFinancialTable
         return map;
     }, [byCuentaMap, cuentaFilter, columns]);
 
-    // Filtered COSTO total
     const filteredCostoRow = useMemo(
         () => isFiltered ? { PARTIDA_PL: 'COSTO', ...sumRows(filteredCostoCuenta, columns) } as ReportRow : null,
         [isFiltered, filteredCostoCuenta, columns],
     );
 
-    const headerCols = useMemo(() => [...columns.map(c => c.header), 'TOTAL'], [columns]);
-
     const isExpandable = (label: string) => CECO_EXPANDABLE.has(label) || CUENTA_EXPANDABLE.has(label);
 
-    /** Get display row — if filtered, use recomputed values for expandable partidas */
     const getDisplayRow = (row: ReportRow, label: string): ReportRow => {
         if (!isFiltered) return row;
         if (label === 'COSTO' && filteredCostoRow) return filteredCostoRow;
@@ -338,40 +337,40 @@ export default function ExpandableFinancialTable(props: ExpandableFinancialTable
     };
 
     return (
-        <div className="space-y-3">
-            {/* Filter bar */}
-            <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[11px] uppercase font-semibold text-txt-muted tracking-wide">Cuenta:</span>
-                {FILTER_OPTIONS.map(opt => (
-                    <button
-                        key={opt.value}
-                        onClick={() => setCuentaFilter(opt.value)}
-                        className={`px-3 py-1.5 text-xs font-medium rounded-md border transition-colors
-                            ${cuentaFilter === opt.value
-                                ? 'bg-accent text-white border-accent'
-                                : 'bg-surface border-border text-txt-secondary hover:bg-surface-alt hover:text-txt'}`}
-                    >
-                        {opt.label}
-                    </button>
-                ))}
-            </div>
+        <div>
+            {/* Filter tabs */}
+            <nav className="flex items-baseline gap-6 mb-10 flex-wrap">
+                <span className="text-[11px] font-semibold uppercase text-txt-muted" style={{ letterSpacing: '1.2px' }}>
+                    Cuenta
+                </span>
+                <div className="flex gap-6 flex-wrap">
+                    {FILTER_OPTIONS.map(opt => (
+                        <button
+                            key={opt.value}
+                            onClick={() => setCuentaFilter(opt.value)}
+                            className={`text-[13px] bg-transparent border-none cursor-pointer pb-1.5 transition-all
+                                ${cuentaFilter === opt.value
+                                    ? 'text-txt font-semibold border-b-[3px] border-b-txt'
+                                    : 'text-txt-muted font-normal border-b-2 border-b-transparent hover:text-txt-secondary'
+                                }`}
+                            style={{ letterSpacing: '0.2px' }}
+                        >
+                            {opt.label}
+                        </button>
+                    ))}
+                </div>
+            </nav>
 
             {/* Table */}
-            <div className="table-card overflow-x-auto">
-                <table className="min-w-full text-xs">
+            <div className="overflow-x-auto">
+                <table className="rpt-table">
                     <thead>
-                        <tr className="thead-row">
-                            <th scope="col" className="thead-cell sticky-col bg-surface-alt text-left min-w-[360px]">
-                                PARTIDA
-                            </th>
+                        <tr>
+                            <th className="text-left">Partida</th>
                             {columns.map(col => (
-                                <th scope="col" key={col.header} className="thead-cell text-right min-w-[90px]">
-                                    {col.header}
-                                </th>
+                                <th key={col.header}>{col.header}</th>
                             ))}
-                            <th scope="col" className="thead-cell text-right min-w-[90px] cell-total-col">
-                                TOTAL
-                            </th>
+                            <th className="rpt-col-total">Total</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -385,49 +384,37 @@ export default function ExpandableFinancialTable(props: ExpandableFinancialTable
 
                             if (isEmpty) {
                                 return (
-                                    <tr key={idx} className="h-1.5">
-                                        <td colSpan={headerCols.length + 1} className="bg-surface-alt/50"></td>
+                                    <tr key={idx} className="rpt-row-spacer">
+                                        <td colSpan={columns.length + 2}></td>
                                     </tr>
                                 );
                             }
 
+                            const rowClass = isBold ? 'rpt-row-bold' : canExpand ? 'rpt-row-l0' : 'rpt-row-data';
+
                             return (
                                 <Frag key={idx}>
-                                    {/* Summary row */}
                                     <tr
-                                        className={`row-base
-                                            ${isBold ? 'bg-surface-alt hover:bg-surface-alt' : ''}
-                                            ${canExpand ? 'cursor-pointer' : ''}`}
+                                        className={rowClass}
                                         onClick={canExpand ? () => togglePartida(label) : undefined}
+                                        style={canExpand ? { cursor: 'pointer' } : undefined}
                                     >
-                                        <td className={`sticky-col px-4 py-2 whitespace-nowrap
-                                            ${isBold
-                                                ? 'font-bold text-txt bg-surface-alt'
-                                                : 'text-txt-secondary bg-surface'}`}>
-                                            <span className="flex items-center gap-1.5">
-                                                {canExpand && <Chevron expanded={isExpanded} />}
-                                                {label}
-                                                {isFiltered && canExpand && (
-                                                    <span className="text-[10px] font-medium text-accent bg-accent/10 px-1.5 py-0.5 rounded">
-                                                        {cuentaFilter}
-                                                    </span>
-                                                )}
-                                            </span>
+                                        <td>
+                                            {canExpand && (
+                                                <span className="rpt-chevron">{isExpanded ? '\u25BE' : '\u25B8'}</span>
+                                            )}
+                                            {label}
+                                            {isFiltered && canExpand && (
+                                                <span className="text-[10px] text-txt-muted ml-2">({cuentaFilter})</span>
+                                            )}
                                         </td>
-                                        {columns.map(col => {
-                                            const val = getCellValue(displayRow, col);
-                                            return (
-                                                <td key={col.header} className={`cell-base ${cellClass(val, isBold)}`}>
-                                                    {formatNumber(val)}
-                                                </td>
-                                            );
-                                        })}
+                                        <NumCells row={displayRow} columns={columns} />
                                         {(() => {
                                             const total = (isFiltered && canExpand)
                                                 ? (displayRow['TOTAL'] as number | null)
                                                 : getSummaryTotal(displayRow, columns, 'pl');
                                             return (
-                                                <td className={`cell-base cell-total-col ${cellClass(total, true)}`}>
+                                                <td className={negClass(total)} style={{ fontWeight: 600 }}>
                                                     {formatNumber(total)}
                                                 </td>
                                             );
@@ -489,18 +476,18 @@ function CecoExpansion({ partida, cecoGroups, cuentaEntriesByCecoGroup, expanded
 
                 return (
                     <Frag key={`cg-${group.label}`}>
+                        {/* L1: CECO group */}
                         <tr
-                            className="row-base cursor-pointer bg-blue-50/40 hover:bg-blue-50/70"
+                            className="rpt-row-l1"
                             onClick={() => toggleCecoGroup(partida, group.label)}
+                            style={{ cursor: 'pointer' }}
                         >
-                            <td className="sticky-col px-4 py-2 whitespace-nowrap text-txt-secondary bg-blue-50/40">
-                                <span className="flex items-center gap-1.5 pl-5">
-                                    <Chevron expanded={isGroupExpanded} />
-                                    <span className="font-semibold text-txt-secondary">{group.label}</span>
-                                </span>
+                            <td>
+                                <span className="rpt-chevron">{isGroupExpanded ? '\u25BE' : '\u25B8'}</span>
+                                {group.label}
                             </td>
-                            <NumCells row={group.data} columns={columns} bold={false} />
-                            <TotalCell val={group.data['TOTAL'] as number | null} />
+                            <NumCells row={group.data} columns={columns} />
+                            <TotalCell row={group.data} columns={columns} />
                         </tr>
 
                         {isGroupExpanded && (
@@ -510,8 +497,8 @@ function CecoExpansion({ partida, cecoGroups, cuentaEntriesByCecoGroup, expanded
                                 expandedCuentaCats={expandedCuentaCats}
                                 toggleCuentaCat={toggleCuentaCat}
                                 columns={columns}
-                                indent={10}
-                                childIndent="4.5rem"
+                                catLevel="l2"
+                                leafLevel="l3"
                             />
                         )}
                     </Frag>
@@ -537,22 +524,22 @@ function CuentaExpansion({ partida, entries, expandedCuentaCats, toggleCuentaCat
             expandedCuentaCats={expandedCuentaCats}
             toggleCuentaCat={toggleCuentaCat}
             columns={columns}
-            indent={5}
-            childIndent="3rem"
+            catLevel="l1"
+            leafLevel="l2"
         />
     );
 }
 
 // ── Cuenta entry rows (shared between CECO and simple modes) ─────────
 
-function CuentaEntryRows({ entries, parentKey, expandedCuentaCats, toggleCuentaCat, columns, indent, childIndent }: {
+function CuentaEntryRows({ entries, parentKey, expandedCuentaCats, toggleCuentaCat, columns, catLevel, leafLevel }: {
     entries: CuentaEntry[];
     parentKey: string;
     expandedCuentaCats: Set<string>;
     toggleCuentaCat: (key: string) => void;
     columns: DisplayColumn[];
-    indent: number;       // pl- value for category rows
-    childIndent: string;  // pl-[...] value for individual cuenta rows
+    catLevel: 'l1' | 'l2';
+    leafLevel: 'l2' | 'l3';
 }) {
     return (
         <>
@@ -560,16 +547,12 @@ function CuentaEntryRows({ entries, parentKey, expandedCuentaCats, toggleCuentaC
                 if (entry.prefix === null) {
                     const cuentaRow = entry.row;
                     return (
-                        <tr key={`ug-${ei}`} className="row-base bg-amber-50/30 hover:bg-amber-50/60">
-                            <td className="sticky-col px-4 py-1.5 whitespace-nowrap text-txt-muted bg-amber-50/30">
-                                <span className="flex items-center gap-1.5" style={{ paddingLeft: childIndent }}>
-                                    <span className="font-mono text-[11px]">{cuentaRow['CUENTA_CONTABLE']}</span>
-                                    <span className="text-txt-faint">&mdash;</span>
-                                    <span className="text-[11px]">{cuentaRow['DESCRIPCION']}</span>
-                                </span>
+                        <tr key={`ug-${ei}`} className={`rpt-row-${leafLevel}`}>
+                            <td>
+                                {cuentaRow['CUENTA_CONTABLE']} {cuentaRow['DESCRIPCION']}
                             </td>
-                            <NumCells row={cuentaRow} columns={columns} bold={false} small />
-                            <TotalCell val={cuentaRow['TOTAL'] as number | null} small />
+                            <NumCells row={cuentaRow} columns={columns} />
+                            <TotalCell row={cuentaRow} columns={columns} />
                         </tr>
                     );
                 }
@@ -579,62 +562,34 @@ function CuentaEntryRows({ entries, parentKey, expandedCuentaCats, toggleCuentaC
 
                 return (
                     <Frag key={`cat-${entry.prefix}`}>
+                        {/* Cuenta category row */}
                         <tr
-                            className="row-base cursor-pointer bg-amber-50/30 hover:bg-amber-50/60"
+                            className={`rpt-row-${catLevel}`}
                             onClick={() => toggleCuentaCat(catKey)}
+                            style={{ cursor: 'pointer' }}
                         >
-                            <td className="sticky-col px-4 py-1.5 whitespace-nowrap text-txt-secondary bg-amber-50/30">
-                                <span className="flex items-center gap-1.5" style={{ paddingLeft: `${indent * 4}px` }}>
-                                    <Chevron expanded={isCatExpanded} />
-                                    <span className="font-medium text-[12px]">{entry.label}</span>
-                                </span>
+                            <td>
+                                <span className="rpt-chevron">{isCatExpanded ? '\u25BE' : '\u25B8'}</span>
+                                {entry.label}
                             </td>
-                            <NumCells row={entry.data} columns={columns} bold={false} small />
-                            <TotalCell val={entry.data['TOTAL'] as number | null} small />
+                            <NumCells row={entry.data} columns={columns} />
+                            <TotalCell row={entry.data} columns={columns} />
                         </tr>
 
+                        {/* Individual cuenta rows */}
                         {isCatExpanded && entry.cuentaRows.map((cuentaRow, ki) => (
-                            <tr key={`cr-${ki}`} className="row-base bg-emerald-50/25 hover:bg-emerald-50/50">
-                                <td className="sticky-col px-4 py-1.5 whitespace-nowrap text-txt-muted bg-emerald-50/25">
-                                    <span className="flex items-center gap-1.5" style={{ paddingLeft: childIndent }}>
-                                        <span className="font-mono text-[11px]">{cuentaRow['CUENTA_CONTABLE']}</span>
-                                        <span className="text-txt-faint">&mdash;</span>
-                                        <span className="text-[11px]">{cuentaRow['DESCRIPCION']}</span>
-                                    </span>
+                            <tr key={`cr-${ki}`} className={`rpt-row-${leafLevel}`}>
+                                <td>
+                                    {cuentaRow['CUENTA_CONTABLE']} {cuentaRow['DESCRIPCION']}
                                 </td>
-                                <NumCells row={cuentaRow} columns={columns} bold={false} small />
-                                <TotalCell val={cuentaRow['TOTAL'] as number | null} small />
+                                <NumCells row={cuentaRow} columns={columns} />
+                                <TotalCell row={cuentaRow} columns={columns} />
                             </tr>
                         ))}
                     </Frag>
                 );
             })}
         </>
-    );
-}
-
-// ── Shared small components ──────────────────────────────────────────
-
-function NumCells({ row, columns, bold, small }: { row: ReportRow; columns: DisplayColumn[]; bold: boolean; small?: boolean }) {
-    return (
-        <>
-            {columns.map(col => {
-                const val = getCellValue(row, col);
-                return (
-                    <td key={col.header} className={`cell-base ${small ? 'text-[11px]' : ''} ${cellClass(val, bold)}`}>
-                        {formatNumber(val)}
-                    </td>
-                );
-            })}
-        </>
-    );
-}
-
-function TotalCell({ val, small }: { val: number | null; small?: boolean }) {
-    return (
-        <td className={`cell-base cell-total-col ${small ? 'text-[11px]' : ''} ${cellClass(val, !small)}`}>
-            {formatNumber(val)}
-        </td>
     );
 }
 

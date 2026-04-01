@@ -1,4 +1,3 @@
-import { useMemo } from 'react';
 import type { ReportRow, DisplayColumn } from '@/types';
 import { formatNumber } from '@/utils/format';
 import { getCellValue, getSummaryTotal, BOLD_ROWS_PL, BOLD_ROWS_BS } from '@/utils/cellValue';
@@ -11,40 +10,25 @@ interface FinancialTableProps {
     variant: 'pl' | 'bs';
 }
 
-/** Resolve a cell's CSS classes based on its value and row type */
-function cellClass(val: number | null | undefined, isBold: boolean): string {
-    if (val === null || val === undefined) return 'cell-normal';
-    if (val === 0) return 'cell-zero';
-    if (val < 0) return 'cell-neg';
-    return isBold ? 'cell-bold' : 'cell-normal';
+function negClass(val: number | null | undefined): string {
+    if (val !== null && val !== undefined && val < 0) return 'rpt-neg';
+    return '';
 }
 
 export default function FinancialTable({ rows, columns, labelKey, showTotal = false, variant }: FinancialTableProps) {
     const boldSet = variant === 'pl' ? BOLD_ROWS_PL : BOLD_ROWS_BS;
 
-    const headerCols = useMemo(() => {
-        const cols = columns.map(c => c.header);
-        if (showTotal) cols.push('TOTAL');
-        return cols;
-    }, [columns, showTotal]);
-
     return (
-        <div className="table-card overflow-x-auto">
-            <table className="min-w-full text-xs">
+        <div className="overflow-x-auto">
+            <table className="rpt-table">
                 <thead>
-                    <tr className="thead-row">
-                        <th scope="col" className="thead-cell sticky-col bg-surface-alt text-left min-w-[360px]">
-                            PARTIDA
-                        </th>
+                    <tr>
+                        <th className="text-left">Partida</th>
                         {columns.map(col => (
-                            <th scope="col" key={col.header} className="thead-cell text-right min-w-[90px]">
-                                {col.header}
-                            </th>
+                            <th key={col.header}>{col.header}</th>
                         ))}
                         {showTotal && (
-                            <th scope="col" className="thead-cell text-right min-w-[90px] cell-total-col">
-                                TOTAL
-                            </th>
+                            <th className="rpt-col-total">Total</th>
                         )}
                     </tr>
                 </thead>
@@ -57,31 +41,21 @@ export default function FinancialTable({ rows, columns, labelKey, showTotal = fa
 
                         if (isEmpty) {
                             return (
-                                <tr key={idx} className="h-1.5">
-                                    <td colSpan={headerCols.length + 1} className="bg-surface-alt/50"></td>
+                                <tr key={idx} className="rpt-row-spacer">
+                                    <td colSpan={columns.length + (showTotal ? 2 : 1)}></td>
                                 </tr>
                             );
                         }
 
+                        const rowClass = isBold ? 'rpt-row-bold' : isSection ? 'rpt-row-section' : 'rpt-row-data';
+
                         return (
-                            <tr
-                                key={idx}
-                                className={`row-base
-                                    ${isBold ? 'bg-surface-alt hover:bg-surface-alt' : ''}
-                                    ${isSection ? 'bg-surface-alt' : ''}`}
-                            >
-                                <td className={`sticky-col px-4 py-2 whitespace-nowrap
-                                    ${isBold
-                                        ? 'font-bold text-txt bg-surface-alt'
-                                        : isSection
-                                            ? 'font-semibold text-txt-secondary bg-surface-alt'
-                                            : 'text-txt-secondary bg-surface'}`}>
-                                    {label}
-                                </td>
+                            <tr key={idx} className={rowClass}>
+                                <td>{label}</td>
                                 {columns.map(col => {
                                     const val = getCellValue(row, col);
                                     return (
-                                        <td key={col.header} className={`cell-base ${cellClass(val, isBold)}`}>
+                                        <td key={col.header} className={negClass(val)}>
                                             {formatNumber(val)}
                                         </td>
                                     );
@@ -89,7 +63,7 @@ export default function FinancialTable({ rows, columns, labelKey, showTotal = fa
                                 {showTotal && (() => {
                                     const total = getSummaryTotal(row, columns, variant);
                                     return (
-                                        <td className={`cell-base cell-total-col ${cellClass(total, true)}`}>
+                                        <td className={negClass(total)} style={{ fontWeight: 600 }}>
                                             {formatNumber(total)}
                                         </td>
                                     );

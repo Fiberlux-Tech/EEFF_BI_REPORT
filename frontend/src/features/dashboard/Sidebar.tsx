@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useReport, isBsView, isAnalysisView, type View } from '@/contexts/ReportContext';
+import ExportButton from '@/components/ExportButton';
 
 function NavButton({ view, label, currentView, onClick }: {
     view: View;
@@ -49,30 +50,9 @@ const BS_SUB_ITEMS = [
 
 const ANALYSIS_SUB_ITEMS = [
     { view: 'analysis_pl_finanzas', label: 'P&L - Finanzas' },
+    { view: 'analysis_planilla', label: 'Analisis de Planilla' },
 ] as const;
 
-function ExportButton({ onClick, disabled, svgPath, label }: {
-    onClick: () => void;
-    disabled: boolean;
-    svgPath: string;
-    label: string;
-}) {
-    return (
-        <button
-            onClick={onClick}
-            disabled={disabled}
-            aria-label={`Exportar ${label}`}
-            className="w-full flex items-center px-3 py-1.5 text-[13px] rounded-md
-                       text-txt-secondary hover:text-txt hover:bg-nav-hover
-                       transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-            <svg className="w-4 h-4 mr-2.5 shrink-0 text-txt-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={svgPath} />
-            </svg>
-            {label}
-        </button>
-    );
-}
 
 export default function Sidebar() {
     const { user, logout } = useAuth();
@@ -211,23 +191,13 @@ export default function Sidebar() {
                     <p className="text-[10px] uppercase font-semibold text-txt-muted px-3 pb-1" style={{ letterSpacing: '1px' }}>
                         Exportar
                     </p>
+                    <ExportButton variant="excel" onClick={() => exportFile('excel')} disabled={isExporting} />
+                    <ExportButton variant="pdf" onClick={() => exportFile('pdf')} disabled={isExporting} />
                     <ExportButton
-                        onClick={() => exportFile('excel')}
-                        disabled={isExporting}
-                        svgPath="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                        label="Excel"
-                    />
-                    <ExportButton
-                        onClick={() => exportFile('pdf')}
-                        disabled={isExporting}
-                        svgPath="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
-                        label="PDF"
-                    />
-                    <ExportButton
+                        variant="all"
                         onClick={() => exportFile('all')}
                         disabled={isExporting}
-                        svgPath="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-                        label={isExporting ? 'Generando...' : 'Todo'}
+                        label={isExporting ? 'Generando...' : undefined}
                     />
                 </div>
             )}

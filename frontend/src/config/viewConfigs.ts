@@ -1,5 +1,6 @@
 import type { View } from '@/contexts/ReportContext';
-import type { ReportData, TableConfig, ReportRow } from '@/types';
+import { ALL_MONTHS } from '@/types';
+import type { ReportData, TableConfig, ReportRow, Month } from '@/types';
 
 // ── View title map ───────────────────────────────────────────────────
 
@@ -25,6 +26,7 @@ export const VIEW_TITLE_MAP: Record<View, string> = {
     bs_provisiones: 'Provisiones por Beneficios a Empleados',
     bs_tributos: 'Tributos por Pagar',
     analysis_pl_finanzas: 'P&L - Finanzas',
+    analysis_planilla: 'Analisis de Planilla',
 };
 
 // ── Note view table configs ──────────────────────────────────────────
@@ -165,10 +167,10 @@ export const VIEW_TABLE_CONFIGS: Record<NoteView, NoteViewConfig> = {
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
-export const ALL_MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+export { ALL_MONTHS };
 
 /** Check if a table has all-zero/null values (should be hidden) */
-export function isAllZeroTable(rows: ReportRow[], months: string[]): boolean {
+export function isAllZeroTable(rows: ReportRow[], months: readonly Month[]): boolean {
     if (rows.length === 0) return true;
     for (const row of rows) {
         for (const m of months) {

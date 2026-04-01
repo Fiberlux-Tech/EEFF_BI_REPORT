@@ -61,8 +61,13 @@ def create_user(args):
         )
         db.commit()
         print(f"User '{args.username}' created successfully.")
-    except sqlite3.IntegrityError:
-        print(f"Error: User '{args.username}' already exists.")
+    except sqlite3.IntegrityError as e:
+        if 'UNIQUE' in str(e).upper() or 'unique' in str(e):
+            print(f"Error: User '{args.username}' already exists.")
+        else:
+            print(f"Error: {e}")
+            print("Hint: the database schema may be out of date. "
+                  "Run 'python3 backend/manage.py migrate-db' to fix.")
         sys.exit(1)
     finally:
         db.close()
@@ -110,6 +115,42 @@ def reset_password(args):
     db.close()
 
 
+def migrate_db(args):
+    """Ensure the DB schema matches the current code (drop stale columns like salt)."""
+    db_path = _resolve_db_path()
+    ensure_users_table(db_path)
+    db = sqlite3.connect(db_path)
+    db.row_factory = sqlite3.Row
+
+    # Check current columns
+    cols = [row['name'] for row in db.execute('PRAGMA table_info(users)').fetchall()]
+
+    if 'salt' not in cols:
+        print("Database schema is already up to date.")
+        db.close()
+        return
+
+    print(f"Found stale 'salt' column. Migrating...")
+    # SQLite doesn't support DROP COLUMN before 3.35 — rebuild the table
+    db.executescript('''
+        BEGIN;
+        CREATE TABLE users_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            display_name TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        INSERT INTO users_new (id, username, password_hash, display_name, created_at)
+            SELECT id, username, password_hash, display_name, created_at FROM users;
+        DROP TABLE users;
+        ALTER TABLE users_new RENAME TO users;
+        COMMIT;
+    ''')
+    print("Migration complete — 'salt' column removed.")
+    db.close()
+
+
 def main():
     parser = argparse.ArgumentParser(description='Manage users for FLXContabilidad')
     sub = parser.add_subparsers(dest='command')
@@ -135,6 +176,10 @@ def main():
     p_reset.add_argument('--username', required=True)
     p_reset.add_argument('--password', default=None, help='Omit to enter interactively')
     p_reset.set_defaults(func=reset_password)
+
+    # migrate-db
+    p_migrate = sub.add_parser('migrate-db', help='Migrate DB schema to match current code')
+    p_migrate.set_defaults(func=migrate_db)
 
     args = parser.parse_args()
     if not args.command:

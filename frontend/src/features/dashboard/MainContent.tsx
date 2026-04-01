@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useReport, isBsView } from '@/contexts/ReportContext';
 import FinancialTable from '@/features/dashboard/FinancialTable';
 import ExpandableFinancialTable from '@/features/dashboard/ExpandableFinancialTable';
+import PlanillaTable from '@/features/dashboard/PlanillaTable';
 import PLNoteView from '@/features/dashboard/PLNoteView';
 import type { ReportData, TableConfig, ReportRow } from '@/types';
 import { VIEW_TABLE_CONFIGS, ALL_MONTHS, isAllZeroTable, type NoteView } from '@/config/viewConfigs';
@@ -139,6 +140,14 @@ export default function MainContent() {
             );
         }
 
+        if (currentView === 'analysis_planilla') {
+            const planillaKeys = ['PARTIDA_PL', 'CENTRO_COSTO', 'DESC_CECO', 'CUENTA_CONTABLE', 'DESCRIPCION'];
+            const planillaRows = getMergedDetailRows('planilla_by_cuenta', planillaKeys);
+            const plSummaryRows = getMergedRows('pl_summary', 'PARTIDA_PL', 'pl');
+            const revenueRow = plSummaryRows.find(r => r['PARTIDA_PL'] === 'INGRESOS ORDINARIOS') ?? null;
+            return <PlanillaTable rows={planillaRows} columns={plColumns} revenueRow={revenueRow} />;
+        }
+
         if (currentView === 'pl') {
             const rows = getMergedRows('pl_summary', 'PARTIDA_PL', 'pl');
             return (
@@ -170,7 +179,7 @@ export default function MainContent() {
 
     return (
         <main className="flex-1 px-8 py-6 overflow-auto">
-            <div className="max-w-[1500px] mx-auto">
+            <div className="max-w-[1500px]">
                 {renderView()}
             </div>
         </main>
@@ -195,6 +204,7 @@ function getDataKeyForTable(table: TableConfig, data: ReportData): keyof ReportD
         ['dya_gasto_by_cuenta', data.dya_gasto_by_cuenta],
         ['otros_egresos', data.otros_egresos],
         ['otros_egresos_by_cuenta', data.otros_egresos_by_cuenta],
+        ['planilla_by_cuenta', data.planilla_by_cuenta],
         ['resultado_financiero_ingresos', data.resultado_financiero_ingresos],
         ['resultado_financiero_gastos', data.resultado_financiero_gastos],
         ['otros_ingresos_by_cuenta', data.otros_ingresos_by_cuenta],

@@ -7,6 +7,7 @@ import { formatNumber } from '@/utils/format';
 import { exportDetailToExcel } from '@/utils/exportDetailExcel';
 import DetailTable from './DetailTable';
 import Modal from '@/components/Modal';
+import ExportButton from '@/components/ExportButton';
 
 const DETAIL_HEADERS: Record<string, string> = {
     ASIENTO: 'Asiento',
@@ -43,19 +44,19 @@ function DetailDataTable({ detailRows, filteredRows, filters, updateFilter, page
 
     return (
         <>
-            <div className="table-card overflow-x-auto">
-                <table className="min-w-full text-xs">
+            <div className="overflow-x-auto">
+                <table className="rpt-table-auto">
                     <thead>
-                        <tr className="thead-row">
+                        <tr>
                             {DETAIL_COLS.map(col => (
-                                <th scope="col" key={col} className={`thead-cell text-[11px] font-semibold ${col === 'SALDO' ? 'text-right' : 'text-left'}`}>
+                                <th key={col} className={col === 'SALDO' ? 'text-right' : 'text-left'}>
                                     {DETAIL_HEADERS[col]}
                                 </th>
                             ))}
                         </tr>
-                        <tr className="bg-surface border-b border-border">
+                        <tr>
                             {DETAIL_COLS.map(col => (
-                                <th key={col} className="px-2 py-1.5">
+                                <th key={col} style={{ padding: '4px 8px 10px', borderBottom: '1px solid #eee' }}>
                                     <input
                                         type="text"
                                         value={filters[col] ?? ''}
@@ -69,7 +70,7 @@ function DetailDataTable({ detailRows, filteredRows, filters, updateFilter, page
                     </thead>
                     <tbody>
                         {pageRows.map((row, idx) => (
-                            <tr key={idx} className={`row-base ${idx % 2 === 1 ? 'bg-surface-alt/30' : ''}`}>
+                            <tr key={idx} className="rpt-row-data">
                                 {DETAIL_COLS.map(col => {
                                     const val = row[col];
                                     const isSaldo = col === 'SALDO';
@@ -77,10 +78,8 @@ function DetailDataTable({ detailRows, filteredRows, filters, updateFilter, page
                                     return (
                                         <td
                                             key={col}
-                                            className={`px-3.5 py-2 whitespace-nowrap
-                                                ${isSaldo ? 'text-right font-mono font-medium' : 'text-left'}
-                                                ${isSaldo && numVal !== null && numVal < 0 ? 'cell-neg' :
-                                                  isSaldo && numVal === 0 ? 'cell-zero' : 'text-txt-secondary'}`}
+                                            className={isSaldo && numVal !== null && numVal < 0 ? 'rpt-neg' : ''}
+                                            style={isSaldo ? { textAlign: 'right', fontWeight: 500 } : { textAlign: 'left' }}
                                         >
                                             {isSaldo ? formatNumber(val as number) : (val ?? '')}
                                         </td>
@@ -93,17 +92,18 @@ function DetailDataTable({ detailRows, filteredRows, filters, updateFilter, page
             </div>
 
             {/* Pagination */}
-            <div className="flex items-center justify-between mt-3 px-1">
-                <div className="flex items-center gap-1.5 text-xs text-txt-muted">
-                    <span>Filas:</span>
+            <div className="flex items-center justify-between mt-4 px-1">
+                <div className="flex items-baseline gap-3 text-xs">
+                    <span className="text-txt-muted" style={{ letterSpacing: '0.5px' }}>Filas:</span>
                     {PAGE_SIZES.map(size => (
                         <button
                             key={size}
                             onClick={() => { setPageSize(size); setPage(() => 0); }}
-                            className={`px-2 py-0.5 rounded-md text-xs font-medium transition-colors
+                            className={`text-[13px] bg-transparent border-none cursor-pointer pb-0.5 transition-all
                                 ${pageSize === size
-                                    ? 'bg-accent text-white'
-                                    : 'text-txt-muted hover:bg-surface-alt'}`}
+                                    ? 'text-txt font-semibold border-b-2 border-b-txt'
+                                    : 'text-txt-muted font-normal border-b border-b-transparent hover:text-txt-secondary'
+                                }`}
                         >
                             {size}
                         </button>
@@ -222,17 +222,14 @@ export default function PLNoteView({ tables, columns, year }: PLNoteViewProps) {
         dispatch({ type: 'SELECT', selection: sel });
 
         try {
-            // Parse months from selection (could be "JAN" or "JAN,FEB,MAR" for quarterly)
             const selMonths = sel.month ? sel.month.split(',') : null;
 
             if (periodRange === 'trailing12' && selMonths) {
-                // For trailing 12M, we may need to fetch from two different years
                 const monthYearMap = new Map<string, number>();
                 for (const src of trailingMonthSources) {
                     monthYearMap.set(src.month, src.year);
                 }
 
-                // Group months by year
                 const byYear = new Map<number, string[]>();
                 for (const m of selMonths) {
                     const y = monthYearMap.get(m) ?? yearRef.current;
@@ -240,7 +237,6 @@ export default function PLNoteView({ tables, columns, year }: PLNoteViewProps) {
                     byYear.get(y)!.push(m);
                 }
 
-                // Fetch from each year and merge
                 const allRows: ReportRow[] = [];
                 for (const [fetchYear, months] of byYear) {
                     for (const month of months) {
@@ -260,7 +256,6 @@ export default function PLNoteView({ tables, columns, year }: PLNoteViewProps) {
                 }
                 dispatch({ type: 'LOAD_SUCCESS', rows: allRows });
             } else if (selMonths && selMonths.length > 1) {
-                // Quarterly in YTD mode: fetch each month separately and merge
                 const allRows: ReportRow[] = [];
                 for (const month of selMonths) {
                     const body: Record<string, unknown> = {
@@ -278,7 +273,6 @@ export default function PLNoteView({ tables, columns, year }: PLNoteViewProps) {
                 }
                 dispatch({ type: 'LOAD_SUCCESS', rows: allRows });
             } else {
-                // Single month or full period
                 const body: Record<string, unknown> = {
                     company: companyRef.current,
                     year: yearRef.current,
@@ -341,7 +335,7 @@ export default function PLNoteView({ tables, columns, year }: PLNoteViewProps) {
     };
 
     return (
-        <div className="space-y-8">
+        <div className="space-y-10">
             {tables.map((table, idx) => (
                 <DetailTable
                     key={idx}
@@ -350,6 +344,7 @@ export default function PLNoteView({ tables, columns, year }: PLNoteViewProps) {
                     year={year}
                     selection={state.selection}
                     onCellClick={handleCellClick}
+                    showTitle={tables.length > 1}
                 />
             ))}
 
@@ -358,18 +353,11 @@ export default function PLNoteView({ tables, columns, year }: PLNoteViewProps) {
                 onClose={() => dispatch({ type: 'CLEAR_SELECTION' })}
                 title={`Detalle: ${state.selection?.label ?? ''}`}
                 headerActions={
-                    <button
+                    <ExportButton
+                        variant="excel"
                         onClick={handleExportDetail}
                         disabled={filteredRows.length === 0 || state.isLoadingDetail}
-                        className="btn-export-green"
-                        title="Exportar detalle filtrado a Excel"
-                    >
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                                d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                        </svg>
-                        Excel
-                    </button>
+                    />
                 }
             >
                 {renderDetailContent()}

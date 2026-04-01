@@ -1,3 +1,6 @@
+export const ALL_MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'] as const;
+export type Month = typeof ALL_MONTHS[number];
+
 export interface User {
   id: number;
   username: string;
@@ -54,6 +57,7 @@ export interface ReportData {
   otros_ingresos_by_cuenta: ReportRow[];
   participacion_by_cuenta: ReportRow[];
   provision_by_cuenta: ReportRow[];
+  planilla_by_cuenta: ReportRow[];
   // BS note detail tables
   bs_efectivo: ReportRow[];
   bs_cxc_comerciales: ReportRow[];
@@ -75,7 +79,7 @@ export interface ReportData {
   bs_tributos: ReportRow[];
   company: string;
   year: number;
-  months: string[];
+  months: Month[];
 }
 
 /** Response from /api/data/load-pl (everything except bs_summary) */
@@ -105,7 +109,7 @@ export interface BSReportData {
   bs_tributos: ReportRow[];
   company: string;
   year: number;
-  months: string[];
+  months: Month[];
 }
 
 export type Granularity = 'monthly' | 'quarterly';
@@ -115,13 +119,13 @@ export type PeriodRange = 'ytd' | 'trailing12';
 export interface DisplayColumn {
   header: string;
   /** For monthly: single month key (e.g. "JAN"). For quarterly: 3 month keys (e.g. ["JAN","FEB","MAR"]) */
-  sourceMonths: string[];
+  sourceMonths: Month[];
   /** For quarterly BS: only use the last month (end-of-quarter balance), not sum */
   useLastOnly?: boolean;
 }
 
 /** Metadata about which year each source month belongs to (for trailing 12M drill-down) */
 export interface MonthSource {
-  month: string;   // e.g. "APR"
-  year: number;    // e.g. 2025
+  month: Month;
+  year: number;
 }

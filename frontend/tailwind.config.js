@@ -47,14 +47,10 @@ export default {
           muted: '#999999',
           faint: '#CCCCCC',
         },
-        // Total column
-        'col-total': {
-          DEFAULT: '#F8F8FC',
-          dark: '#F0F0F5',
-        },
       },
       fontFamily: {
         sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
+        serif: ["'Playfair Display'", 'Georgia', "'Times New Roman'", 'serif'],
         mono: ["'SF Mono'", "'Fira Code'", "'Cascadia Code'", 'monospace'],
       },
       fontSize: {

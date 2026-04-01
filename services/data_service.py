@@ -24,7 +24,7 @@ from accounting.transforms import (
 from accounting.aggregation import (
     preaggregate, sales_details, proyectos_especiales,
     detail_by_ceco, detail_by_cuenta, detail_ceco_by_cuenta,
-    detail_resultado_financiero,
+    detail_resultado_financiero, detail_planilla,
     bs_detail_by_cuenta, bs_top20_by_nit, append_total_row,
 )
 from accounting.statements import pl_summary, bs_summary
@@ -229,6 +229,7 @@ def load_report_data(company: str, year: int, *, force_refresh: bool = False) ->
     provision_by_cuenta = detail_by_cuenta(df_stmt, ["PROVISION INCOBRABLE"], preagg=preagg)
     otros_egresos = detail_by_ceco(df_stmt, ["OTROS EGRESOS"], with_total_row=True, preagg=preagg)
     otros_egresos_by_cuenta = detail_by_cuenta(df_stmt, ["OTROS EGRESOS"], preagg=preagg)
+    planilla_by_cuenta = detail_planilla(df_stmt, preagg=preagg)
 
     logger.info("Transforms: %.2fs", time.perf_counter() - t1)
 
@@ -256,6 +257,7 @@ def load_report_data(company: str, year: int, *, force_refresh: bool = False) ->
         "provision_by_cuenta": _df_to_records(provision_by_cuenta),
         "otros_egresos": _df_to_records(otros_egresos),
         "otros_egresos_by_cuenta": _df_to_records(otros_egresos_by_cuenta),
+        "planilla_by_cuenta": _df_to_records(planilla_by_cuenta),
         "company": company,
         "year": year,
         "months": months,
@@ -310,6 +312,7 @@ def _run_pl_transforms(raw_current_full: pd.DataFrame) -> tuple[pd.DataFrame, pd
     provision_by_cuenta = detail_by_cuenta(df_stmt, ["PROVISION INCOBRABLE"], preagg=preagg)
     otros_egresos = detail_by_ceco(df_stmt, ["OTROS EGRESOS"], with_total_row=True, preagg=preagg)
     otros_egresos_by_cuenta = detail_by_cuenta(df_stmt, ["OTROS EGRESOS"], preagg=preagg)
+    planilla_by_cuenta = detail_planilla(df_stmt, preagg=preagg)
 
     records = {
         "pl_summary": _df_to_records(pl),
@@ -332,6 +335,7 @@ def _run_pl_transforms(raw_current_full: pd.DataFrame) -> tuple[pd.DataFrame, pd
         "provision_by_cuenta": _df_to_records(provision_by_cuenta),
         "otros_egresos": _df_to_records(otros_egresos),
         "otros_egresos_by_cuenta": _df_to_records(otros_egresos_by_cuenta),
+        "planilla_by_cuenta": _df_to_records(planilla_by_cuenta),
     }
     return df_stmt, pl, records
 
