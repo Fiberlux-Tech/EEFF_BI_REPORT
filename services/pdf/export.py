@@ -935,7 +935,8 @@ def export_to_pdf(output_path, data: PdfReportData):
     # Pre-convert PL DataFrames to row dicts
     pl_row_cache = {}
     _PL_ATTRS = [
-        "sales_details", "proyectos_especiales", "costo", "gasto_venta",
+        "sales_details", "intercompany_details", "proyectos_especiales",
+        "costo", "gasto_venta",
         "gasto_admin", "resultado_financiero_ingresos", "resultado_financiero_gastos",
         "dya_costo", "dya_gasto",
     ]

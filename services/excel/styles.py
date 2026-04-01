@@ -296,13 +296,12 @@ def style_sales_details(writer, sheet_name=None):
 
     prepare_header_row(ws, SALES_HEADER_ROW)
 
-    # Find and style PE title + header row (title starts with "Nota" or "Proyectos")
+    # Find and style ALL sub-section title + header rows
     for row in range(SALES_HEADER_ROW + 1, ws.max_row + 1):
         val = ws.cell(row=row, column=COL_B).value
-        if isinstance(val, str) and (val.startswith("Nota") or val.startswith("Proyectos")):
+        if isinstance(val, str) and (val.startswith("Nota") or val.startswith("Proyectos") or val.startswith("Ingresos")):
             style_title(ws, row)
             prepare_header_row(ws, row + 1)
-            break
 
     bold_total_column(ws)
     bold_total_rows(ws)

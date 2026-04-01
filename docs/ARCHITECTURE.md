@@ -102,7 +102,7 @@ data_service.load_report_data()
     ├── Cache: result dict + raw DataFrames + prepared BS + statement DataFrame
     │
     └── Response: { pl_summary, bs_summary, ingresos_ordinarios, ingresos_proyectos,
-                    costo, gasto_venta, gasto_admin, dya_costo, dya_gasto,
+                    ingresos_intercompany, costo, gasto_venta, gasto_admin, dya_costo, dya_gasto,
                     resultado_financiero_ingresos, resultado_financiero_gastos,
                     company, year, months }
 ```

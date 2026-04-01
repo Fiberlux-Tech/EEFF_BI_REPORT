@@ -94,22 +94,27 @@ def _write_detalle_cc_x_cc(writer, data):
 
 # ── SALES DETAILS ────────────────────────────────────────────────────────────
 
-def _write_sales_details(writer, sd, pe, year, title, sheet_name, pe_title):
-    """Write the SALES DETAILS sheet with Ingresos Ordinarios and Proyectos Especiales."""
-    sd = sd.rename(columns={TOTAL_COL: str(year)})
-    pe = pe.rename(columns={TOTAL_COL: str(year)})
+def _write_sales_details(writer, sections, year, sheet_name):
+    """Write the SALES DETAILS sheet with N sales tables stacked vertically.
 
-    sd.to_excel(writer, sheet_name=sheet_name, index=False,
-                startrow=SALES_PANDAS_STARTROW, startcol=DATA_START_COL)
+    *sections* is a list of (title, df) tuples.
+    """
+    if not sections:
+        return
+    first_title, first_df = sections[0]
+    first_df = first_df.rename(columns={TOTAL_COL: str(year)})
+    first_df.to_excel(writer, sheet_name=sheet_name, index=False,
+                      startrow=SALES_PANDAS_STARTROW, startcol=DATA_START_COL)
     ws = writer.sheets[sheet_name]
-    _init_sheet(ws, title)
+    _init_sheet(ws, first_title)
 
-    # Proyectos Especiales beneath
-    start_row = SALES_HEADER_ROW + len(sd) + 1 + PE_GAP_ROWS
-    ws.cell(row=start_row, column=COL_B, value=pe_title)
-
-    pe.to_excel(writer, sheet_name=sheet_name, index=False,
-                startrow=start_row, startcol=DATA_START_COL)
+    start_row = SALES_HEADER_ROW + len(first_df) + 1 + PE_GAP_ROWS
+    for title, df in sections[1:]:
+        df = df.rename(columns={TOTAL_COL: str(year)})
+        ws.cell(row=start_row, column=COL_B, value=title)
+        df.to_excel(writer, sheet_name=sheet_name, index=False,
+                    startrow=start_row, startcol=DATA_START_COL)
+        start_row += len(df) + 1 + PE_GAP_ROWS
 
 
 # ── BS detail sheets ─────────────────────────────────────────────────────────
@@ -212,11 +217,8 @@ def _write_grouped_nota(writer, sheet_name, resolved, bs, year):
     is_sales = any(e.pattern in (RenderPattern.SALES_INGRESOS, RenderPattern.SALES_PROYECTOS)
                    for _, e, _, _ in resolved)
     if is_sales:
-        sd_title = resolved[0][2]
-        sd = resolved[0][3]
-        pe = resolved[1][3] if len(resolved) > 1 else pd.DataFrame()
-        pe_title = resolved[1][2] if len(resolved) > 1 else ""
-        _write_sales_details(writer, sd, pe, year, sd_title, sheet_name, pe_title)
+        sales_sections = [(title, df) for _, _, title, df in resolved]
+        _write_sales_details(writer, sales_sections, year, sheet_name)
         return
 
     # Check if all entries are BS detail (use multi-table BS layout)

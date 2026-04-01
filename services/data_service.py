@@ -19,7 +19,8 @@ import pandas as pd
 from data.fetcher import fetch_all_data, fetch_pnl_only, fetch_bs_only
 from accounting.transforms import prepare_stmt, prepare_bs_stmt
 from accounting.aggregation import (
-    ensure_month_columns, preaggregate, sales_details, proyectos_especiales,
+    ensure_month_columns, preaggregate, sales_details, intercompany_details,
+    proyectos_especiales,
     detail_by_ceco, detail_by_cuenta, detail_ceco_by_cuenta,
     detail_resultado_financiero, detail_planilla,
     detail_proveedores_transporte,
@@ -240,6 +241,7 @@ def _run_pl_transforms(raw_current_full: pd.DataFrame) -> tuple[pd.DataFrame, pd
 
     preagg = preaggregate(df_stmt)
     sd = sales_details(df_stmt, with_total_row=True, preagg=preagg)
+    ic = intercompany_details(df_stmt, with_total_row=True, preagg=preagg)
     pe = proyectos_especiales(df_stmt, MONTH_NAMES_LIST, with_total_row=True)
     costo = detail_by_ceco(df_stmt, ["COSTO"], with_total_row=True, preagg=preagg)
     costo_by_cuenta = detail_ceco_by_cuenta(df_stmt, ["COSTO"], preagg=preagg)
@@ -263,6 +265,7 @@ def _run_pl_transforms(raw_current_full: pd.DataFrame) -> tuple[pd.DataFrame, pd
     records = {
         "pl_summary": _df_to_records(pl),
         "ingresos_ordinarios": _df_to_records(sd),
+        "ingresos_intercompany": _df_to_records(ic),
         "ingresos_proyectos": _df_to_records(pe),
         "costo": _df_to_records(costo),
         "costo_by_cuenta": _df_to_records(costo_by_cuenta),

@@ -212,6 +212,11 @@ def sales_details_pdf(ctx: PeriodContext, with_total_row: bool = False):
                                 with_total_row=with_total_row)
 
 
+def intercompany_details_pdf(ctx: PeriodContext, with_total_row: bool = False):
+    return detail_by_cuenta_pdf(ctx, ["INGRESOS INTERCOMPANY"],
+                                with_total_row=with_total_row)
+
+
 def proyectos_especiales_pdf(ctx: PeriodContext,
                              with_total_row: bool = False):
     col_names = build_column_names(ctx.period_type, ctx.period_num, ctx.year)

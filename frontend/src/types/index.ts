@@ -39,6 +39,7 @@ export interface ReportData {
   pl_summary: ReportRow[];
   bs_summary: ReportRow[];
   ingresos_ordinarios: ReportRow[];
+  ingresos_intercompany: ReportRow[];
   ingresos_proyectos: ReportRow[];
   costo: ReportRow[];
   costo_by_cuenta: ReportRow[];

@@ -265,6 +265,7 @@ export interface ReportData {
   bs_summary: ReportRow[];
   ingresos_ordinarios: ReportRow[];
   ingresos_proyectos: ReportRow[];
+  ingresos_intercompany: ReportRow[];
   costo: ReportRow[];
   gasto_venta: ReportRow[];
   gasto_admin: ReportRow[];
