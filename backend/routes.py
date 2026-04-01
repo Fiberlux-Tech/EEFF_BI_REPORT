@@ -1,6 +1,7 @@
 """API routes — data loading, report exports, file downloads."""
 
 import os
+import functools
 import logging
 import time
 import threading
@@ -76,92 +77,80 @@ def cache_stats():
     return _ok(get_cache_stats())
 
 
+# ── Shared error handling ──────────────────────────────────────────────
+
+def _handle_data_errors(label: str):
+    """Decorator that wraps a route handler with standard data-error handling.
+
+    The wrapped function receives ``(body, company, year)`` — body is already
+    parsed and company/year already validated.  ``label`` appears in log
+    messages (e.g. "loading data", "loading P&L").
+    """
+    def decorator(fn):
+        @functools.wraps(fn)
+        def wrapper(*args, **kwargs):
+            body = request.get_json(silent=True) or {}
+            company, year = _validate_company_year(body)
+            try:
+                return fn(body, company, year)
+            except (ValueError, KeyError) as exc:
+                return jsonify({'status': 'error', 'error': str(exc)}), 400
+            except (QueryError, DataValidationError) as exc:
+                logger.exception("Data error %s %s/%s", label, company, year)
+                return jsonify({'status': 'error', 'error': str(exc)}), 500
+            except PlantillasError as exc:
+                logger.exception("Error %s %s/%s", label, company, year)
+                return jsonify({'status': 'error', 'error': 'Error interno del servidor'}), 500
+        return wrapper
+    return decorator
+
+
+def _timed_load(service_fn, body, company, year):
+    """Call a data-loading service function with timing."""
+    force_refresh = body.get('force_refresh', False)
+    t0 = time.perf_counter()
+    data = service_fn(company, year, force_refresh=force_refresh)
+    result = {k: v for k, v in data.items() if not k.startswith('_')}
+    result['_timing_ms'] = round((time.perf_counter() - t0) * 1000)
+    return _ok(result)
+
+
 # ── Data loading ────────────────────────────────────────────────────────
 
 @api_bp.route('/data/load', methods=['POST'])
 @login_required
-def load_data():
+@_handle_data_errors("loading data")
+def load_data(body, company, year):
     """Fetch and transform all report data for a company/year.
 
     Body: { "company": "FIBERLUX", "year": 2026 }
     Optional: { "force_refresh": true }
     """
-    body = request.get_json(silent=True) or {}
-    force_refresh = body.get('force_refresh', False)
-
-    company, year = _validate_company_year(body)
-
-    try:
-        t0 = time.perf_counter()
-        data = load_report_data(company, year, force_refresh=force_refresh)
-        # Remove internal cache metadata
-        result = {k: v for k, v in data.items() if not k.startswith('_')}
-        result['_timing_ms'] = round((time.perf_counter() - t0) * 1000)
-        return _ok(result)
-    except (ValueError, KeyError) as exc:
-        return jsonify({'status': 'error', 'error': str(exc)}), 400
-    except (QueryError, DataValidationError) as exc:
-        logger.exception("Data error loading %s/%s", company, year)
-        return jsonify({'status': 'error', 'error': str(exc)}), 500
-    except PlantillasError as exc:
-        logger.exception("Error loading data for %s/%s", company, year)
-        return jsonify({'status': 'error', 'error': 'Error interno del servidor'}), 500
+    return _timed_load(load_report_data, body, company, year)
 
 
 @api_bp.route('/data/load-pl', methods=['POST'])
 @login_required
-def load_pl():
+@_handle_data_errors("loading P&L")
+def load_pl(body, company, year):
     """Fetch P&L data only (fast path). BS is pre-fetched in the background.
 
     Body: { "company": "FIBERLUX", "year": 2026 }
     Optional: { "force_refresh": true }
     """
-    body = request.get_json(silent=True) or {}
-    force_refresh = body.get('force_refresh', False)
-    company, year = _validate_company_year(body)
-
-    try:
-        t0 = time.perf_counter()
-        data = load_pl_data(company, year, force_refresh=force_refresh)
-        result = {k: v for k, v in data.items() if not k.startswith('_')}
-        result['_timing_ms'] = round((time.perf_counter() - t0) * 1000)
-        return _ok(result)
-    except (ValueError, KeyError) as exc:
-        return jsonify({'status': 'error', 'error': str(exc)}), 400
-    except (QueryError, DataValidationError) as exc:
-        logger.exception("Data error loading P&L for %s/%s", company, year)
-        return jsonify({'status': 'error', 'error': str(exc)}), 500
-    except PlantillasError as exc:
-        logger.exception("Error loading P&L for %s/%s", company, year)
-        return jsonify({'status': 'error', 'error': 'Error interno del servidor'}), 500
+    return _timed_load(load_pl_data, body, company, year)
 
 
 @api_bp.route('/data/load-bs', methods=['POST'])
 @login_required
-def load_bs():
+@_handle_data_errors("loading BS")
+def load_bs(body, company, year):
     """Fetch BS data. Requires P&L to be loaded first (for UTILIDAD NETA).
 
     Body: { "company": "FIBERLUX", "year": 2026 }
     Optional: { "force_refresh": true }
     """
-    body = request.get_json(silent=True) or {}
-    force_refresh = body.get('force_refresh', False)
-    company, year = _validate_company_year(body)
-
-    try:
-        t0 = time.perf_counter()
-        data = load_bs_data(company, year, force_refresh=force_refresh)
-        result = {k: v for k, v in data.items() if not k.startswith('_')}
-        result['_timing_ms'] = round((time.perf_counter() - t0) * 1000)
-        return _ok(result)
-    except (ValueError, KeyError) as exc:
-        return jsonify({'status': 'error', 'error': str(exc)}), 400
-    except (QueryError, DataValidationError) as exc:
-        logger.exception("Data error loading BS for %s/%s", company, year)
-        return jsonify({'status': 'error', 'error': str(exc)}), 500
-    except PlantillasError as exc:
-        logger.exception("Error loading BS for %s/%s", company, year)
-        return jsonify({'status': 'error', 'error': 'Error interno del servidor'}), 500
+    return _timed_load(load_bs_data, body, company, year)
 
 
 # ── Detail drill-down ──────────────────────────────────────────────────
@@ -174,14 +163,14 @@ _ALLOWED_FILTER_COLS = {
 
 @api_bp.route('/data/detail', methods=['POST'])
 @login_required
-def get_detail():
+@_handle_data_errors("getting detail")
+def get_detail(body, company, year):
     """Return raw journal entries for a specific cell in the ingresos view.
 
     Body: { "company": "FIBERLUX", "year": 2026,
             "partida": "INGRESOS ORDINARIOS", "month": "JAN",
             "filter_col": "CUENTA_CONTABLE", "filter_val": "7011101" }
     """
-    body = request.get_json(silent=True) or {}
     partida = body.get('partida', '').strip()
     month = body.get('month', '').strip().upper() if body.get('month') else None
     filter_col = body.get('filter_col')
@@ -193,22 +182,12 @@ def get_detail():
     if filter_col and filter_col not in _ALLOWED_FILTER_COLS:
         raise RequestValidationError(f'Columna de filtro no permitida: {filter_col}')
 
-    company, year = _validate_company_year(body)
     if not partida:
         raise RequestValidationError('partida es requerido')
 
-    try:
-        records = get_detail_records(company, year, partida, month,
-                                     filter_col=filter_col, filter_val=filter_val)
-        return _ok({'records': records})
-    except (ValueError, KeyError) as exc:
-        return jsonify({'status': 'error', 'error': str(exc)}), 400
-    except (QueryError, DataValidationError) as exc:
-        logger.exception("Data error getting detail for %s/%s", company, year)
-        return jsonify({'status': 'error', 'error': str(exc)}), 500
-    except PlantillasError as exc:
-        logger.exception("Error getting detail for %s/%s", company, year)
-        return jsonify({'status': 'error', 'error': 'Error interno del servidor'}), 500
+    records = get_detail_records(company, year, partida, month,
+                                 filter_col=filter_col, filter_val=filter_val)
+    return _ok({'records': records})
 
 
 # ── Exports ─────────────────────────────────────────────────────────────

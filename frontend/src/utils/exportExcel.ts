@@ -33,18 +33,7 @@ export interface ExportOptions {
 
 // ── Styles ───────────────────────────────────────────────────────────
 
-const NUM_FMT = '#,##0;-#,##0;"-"';
-
-const HEADER_STYLE: XLSX.CellStyle = {
-    font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 10 },
-    fill: { fgColor: { rgb: '1F2937' } },
-    alignment: { horizontal: 'center' },
-};
-
-const HEADER_LABEL_STYLE: XLSX.CellStyle = {
-    ...HEADER_STYLE,
-    alignment: { horizontal: 'left' },
-};
+import { NUM_FMT, HEADER_STYLE, HEADER_LABEL_STYLE, NUM_STYLE, TEXT_STYLE as LABEL_STYLE } from '@/utils/excelStyles';
 
 const BOLD_NUM_STYLE: XLSX.CellStyle = {
     font: { bold: true, sz: 10 },
@@ -55,16 +44,6 @@ const BOLD_NUM_STYLE: XLSX.CellStyle = {
 const BOLD_LABEL_STYLE: XLSX.CellStyle = {
     font: { bold: true, sz: 10 },
     fill: { fgColor: { rgb: 'F9FAFB' } },
-};
-
-const NUM_STYLE: XLSX.CellStyle = {
-    font: { sz: 10 },
-    numFmt: NUM_FMT,
-    alignment: { horizontal: 'right' },
-};
-
-const LABEL_STYLE: XLSX.CellStyle = {
-    font: { sz: 10 },
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────

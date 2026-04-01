@@ -1,28 +1,6 @@
 import XLSX from 'xlsx-js-style';
 import type { ReportRow } from '@/types';
-
-const NUM_FMT = '#,##0;-#,##0;"-"';
-
-const HEADER_STYLE: XLSX.CellStyle = {
-    font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 10 },
-    fill: { fgColor: { rgb: '1F2937' } },
-    alignment: { horizontal: 'center' },
-};
-
-const HEADER_LABEL_STYLE: XLSX.CellStyle = {
-    ...HEADER_STYLE,
-    alignment: { horizontal: 'left' },
-};
-
-const NUM_STYLE: XLSX.CellStyle = {
-    font: { sz: 10 },
-    numFmt: NUM_FMT,
-    alignment: { horizontal: 'right' },
-};
-
-const TEXT_STYLE: XLSX.CellStyle = {
-    font: { sz: 10 },
-};
+import { HEADER_STYLE, HEADER_LABEL_STYLE, NUM_STYLE, TEXT_STYLE } from '@/utils/excelStyles';
 
 const COLS: { key: string; header: string; width: number }[] = [
     { key: 'ASIENTO',         header: 'Asiento',        width: 12 },

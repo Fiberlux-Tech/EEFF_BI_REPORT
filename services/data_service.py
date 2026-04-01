@@ -17,12 +17,9 @@ import numpy as np
 import pandas as pd
 
 from data.fetcher import fetch_all_data, fetch_pnl_only, fetch_bs_only
-from accounting.transforms import (
-    prepare_pnl, filter_for_statements, assign_partida_pl,
-    prepare_bs_stmt,
-)
+from accounting.transforms import prepare_stmt, prepare_bs_stmt
 from accounting.aggregation import (
-    preaggregate, sales_details, proyectos_especiales,
+    ensure_month_columns, preaggregate, sales_details, proyectos_especiales,
     detail_by_ceco, detail_by_cuenta, detail_ceco_by_cuenta,
     detail_resultado_financiero, detail_planilla,
     bs_detail_by_cuenta, bs_top20_by_nit, append_total_row,
@@ -30,7 +27,7 @@ from accounting.aggregation import (
 from accounting.statements import pl_summary, bs_summary
 from accounting.notes import BS_DETAIL_ENTRIES
 from excel.builder import build_excel_data, build_bs_data
-from config.calendar import MONTH_NAMES, MONTH_NAMES_LIST, MONTH_NAMES_SET
+from config.calendar import MONTH_NAMES, MONTH_NAMES_LIST
 from config.company import VALID_COMPANIES
 from config.fields import (
     ASIENTO, CUENTA_CONTABLE, DESCRIPCION, NIT, RAZON_SOCIAL,
@@ -188,15 +185,8 @@ def load_report_data(company: str, year: int, *, force_refresh: bool = False) ->
 
     t1 = time.perf_counter()
 
-    # P&L transforms
-    df_pnl = prepare_pnl(raw_current_full)
-    df_stmt = filter_for_statements(df_pnl)
-    df_stmt = assign_partida_pl(df_stmt)
-    pl = pl_summary(df_stmt)
-
-    # Ensure P&L has all 12 month columns in calendar order (missing filled with 0)
-    non_month_cols = [c for c in pl.columns if c not in MONTH_NAMES_SET]
-    pl = pl.reindex(columns=non_month_cols + MONTH_NAMES_LIST, fill_value=0)
+    # P&L transforms — reuse _run_pl_transforms (shared with load_pl_data)
+    df_stmt, pl, pl_records = _run_pl_transforms(raw_current_full)
 
     # BS transforms — no month filtering; cumsum carries balances forward naturally
     df_bs = prepare_bs_stmt(raw_bs) if not raw_bs.empty else None
@@ -205,62 +195,14 @@ def load_report_data(company: str, year: int, *, force_refresh: bool = False) ->
     else:
         bs = pd.DataFrame()
 
-    # Ingresos detail pivots (reuse df_stmt which has NIT/RAZON_SOCIAL)
-    preagg = preaggregate(df_stmt)
-    sd = sales_details(df_stmt, with_total_row=True, preagg=preagg)
-    pe = proyectos_especiales(df_stmt, MONTH_NAMES_LIST, with_total_row=True)
-
-    # P&L note detail pivots (by CECO)
-    costo = detail_by_ceco(df_stmt, ["COSTO"], with_total_row=True, preagg=preagg)
-    costo_by_cuenta = detail_ceco_by_cuenta(df_stmt, ["COSTO"], preagg=preagg)
-    gasto_venta = detail_by_ceco(df_stmt, ["GASTO VENTA"], with_total_row=True, preagg=preagg)
-    gasto_venta_by_cuenta = detail_by_cuenta(df_stmt, ["GASTO VENTA"], preagg=preagg)
-    gasto_admin = detail_by_ceco(df_stmt, ["GASTO ADMIN"], with_total_row=True, preagg=preagg)
-    gasto_admin_by_cuenta = detail_by_cuenta(df_stmt, ["GASTO ADMIN"], preagg=preagg)
-    dya_costo = detail_by_ceco(df_stmt, ["D&A - COSTO"], with_total_row=True, preagg=preagg)
-    dya_costo_by_cuenta = detail_by_cuenta(df_stmt, ["D&A - COSTO"], preagg=preagg)
-    dya_gasto = detail_by_ceco(df_stmt, ["D&A - GASTO"], with_total_row=True, preagg=preagg)
-    dya_gasto_by_cuenta = detail_by_cuenta(df_stmt, ["D&A - GASTO"], preagg=preagg)
-
-    # Resultado Financiero (split into ingresos/gastos by cuenta)
-    res_fin = detail_resultado_financiero(df_stmt, preagg=preagg)
-    otros_ingresos_by_cuenta = detail_by_cuenta(df_stmt, ["OTROS INGRESOS"], preagg=preagg)
-    participacion_by_cuenta = detail_by_cuenta(df_stmt, ["PARTICIPACION DE TRABAJADORES"], preagg=preagg)
-    provision_by_cuenta = detail_by_cuenta(df_stmt, ["PROVISION INCOBRABLE"], preagg=preagg)
-    otros_egresos = detail_by_ceco(df_stmt, ["OTROS EGRESOS"], with_total_row=True, preagg=preagg)
-    otros_egresos_by_cuenta = detail_by_cuenta(df_stmt, ["OTROS EGRESOS"], preagg=preagg)
-    planilla_by_cuenta = detail_planilla(df_stmt, preagg=preagg)
-
     logger.info("Transforms: %.2fs", time.perf_counter() - t1)
 
-    months = MONTH_NAMES_LIST
-
     result = {
-        "pl_summary": _df_to_records(pl),
+        **pl_records,
         "bs_summary": _df_to_records(bs),
-        "ingresos_ordinarios": _df_to_records(sd),
-        "ingresos_proyectos": _df_to_records(pe),
-        "costo": _df_to_records(costo),
-        "costo_by_cuenta": _df_to_records(costo_by_cuenta),
-        "gasto_venta": _df_to_records(gasto_venta),
-        "gasto_venta_by_cuenta": _df_to_records(gasto_venta_by_cuenta),
-        "gasto_admin": _df_to_records(gasto_admin),
-        "gasto_admin_by_cuenta": _df_to_records(gasto_admin_by_cuenta),
-        "dya_costo": _df_to_records(dya_costo),
-        "dya_costo_by_cuenta": _df_to_records(dya_costo_by_cuenta),
-        "dya_gasto": _df_to_records(dya_gasto),
-        "dya_gasto_by_cuenta": _df_to_records(dya_gasto_by_cuenta),
-        "resultado_financiero_ingresos": _df_to_records(res_fin.ingresos),
-        "resultado_financiero_gastos": _df_to_records(res_fin.gastos),
-        "otros_ingresos_by_cuenta": _df_to_records(otros_ingresos_by_cuenta),
-        "participacion_by_cuenta": _df_to_records(participacion_by_cuenta),
-        "provision_by_cuenta": _df_to_records(provision_by_cuenta),
-        "otros_egresos": _df_to_records(otros_egresos),
-        "otros_egresos_by_cuenta": _df_to_records(otros_egresos_by_cuenta),
-        "planilla_by_cuenta": _df_to_records(planilla_by_cuenta),
         "company": company,
         "year": year,
-        "months": months,
+        "months": MONTH_NAMES_LIST,
     }
 
     _set_in_cache("result", company, year, result)
@@ -273,7 +215,7 @@ def load_report_data(company: str, year: int, *, force_refresh: bool = False) ->
     _set_in_cache("pl_df", company, year, pl)
     _set_in_cache("pl_result", company, year, {k: v for k, v in result.items() if k != "bs_summary"})
     _set_in_cache("bs_result", company, year, {
-        "bs_summary": result["bs_summary"], "company": company, "year": year, "months": months,
+        "bs_summary": result["bs_summary"], "company": company, "year": year, "months": MONTH_NAMES_LIST,
     })
 
     logger.info("Total load_report_data: %.2fs", time.perf_counter() - t0)
@@ -285,13 +227,10 @@ def load_report_data(company: str, year: int, *, force_refresh: bool = False) ->
 
 def _run_pl_transforms(raw_current_full: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
     """Run P&L transform pipeline.  Returns (df_stmt, pl_df, pl_records_dict)."""
-    df_pnl = prepare_pnl(raw_current_full)
-    df_stmt = filter_for_statements(df_pnl)
-    df_stmt = assign_partida_pl(df_stmt)
+    df_stmt = prepare_stmt(raw_current_full)
     pl = pl_summary(df_stmt)
 
-    non_month_cols = [c for c in pl.columns if c not in MONTH_NAMES_SET]
-    pl = pl.reindex(columns=non_month_cols + MONTH_NAMES_LIST, fill_value=0)
+    pl = ensure_month_columns(pl)
 
     preagg = preaggregate(df_stmt)
     sd = sales_details(df_stmt, with_total_row=True, preagg=preagg)

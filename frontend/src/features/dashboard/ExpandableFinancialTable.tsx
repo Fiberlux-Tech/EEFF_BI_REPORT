@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import type { ReportRow, DisplayColumn } from '@/types';
 import { formatNumber } from '@/utils/format';
 import { getCellValue, getSummaryTotal, BOLD_ROWS_PL } from '@/utils/cellValue';
+import { negClass } from '@/utils/classHelpers';
 
 // ── CECO grouping definitions (COSTO only) ──────────────────────────
 
@@ -178,11 +179,6 @@ const CUENTA_EXPANDABLE = new Set([
 ]);
 
 // ── Helpers ──────────────────────────────────────────────────────────
-
-function negClass(val: number | null | undefined): string {
-    if (val !== null && val !== undefined && val < 0) return 'rpt-neg';
-    return '';
-}
 
 function NumCells({ row, columns }: { row: ReportRow; columns: DisplayColumn[] }) {
     return (

@@ -2,26 +2,8 @@ import { useCallback } from 'react';
 import { useReport } from '@/contexts/ReportContext';
 import { VIEW_TITLE_MAP, VIEW_TABLE_CONFIGS, ALL_MONTHS, isAllZeroTable, type NoteView } from '@/config/viewConfigs';
 import { exportToExcel, type ExportSheet, type SummarySheetDef, type DetailSheetDef } from '@/utils/exportExcel';
-import type { ReportData, ReportRow, TableConfig } from '@/types';
-
-/** Map a TableConfig back to the ReportData key via reference equality */
-function getDataKeyForTable(table: TableConfig, data: ReportData): keyof ReportData | null {
-    const mapping: [keyof ReportData, ReportRow[]][] = [
-        ['ingresos_ordinarios', data.ingresos_ordinarios],
-        ['ingresos_proyectos', data.ingresos_proyectos],
-        ['costo', data.costo],
-        ['gasto_venta', data.gasto_venta],
-        ['gasto_admin', data.gasto_admin],
-        ['dya_costo', data.dya_costo],
-        ['dya_gasto', data.dya_gasto],
-        ['resultado_financiero_ingresos', data.resultado_financiero_ingresos],
-        ['resultado_financiero_gastos', data.resultado_financiero_gastos],
-    ];
-    for (const [key, rows] of mapping) {
-        if (table.rows === rows) return key;
-    }
-    return null;
-}
+import type { ReportData } from '@/types';
+import { getDataKeyForTable } from '@/utils/dataKeyMapping';
 
 export function useViewExport(): { handleExport: () => void; canExport: boolean } {
     const {

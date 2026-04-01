@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import type { ReportRow, DisplayColumn } from '@/types';
 import { formatNumber } from '@/utils/format';
 import { getCellValue } from '@/utils/cellValue';
+import { negClass } from '@/utils/classHelpers';
 
 // ── Canonical P&L partida ordering ──────────────────────────────────
 
@@ -124,11 +125,6 @@ function buildHierarchy(rows: ReportRow[], columns: DisplayColumn[]): { partidas
 }
 
 // ── Small helpers ───────────────────────────────────────────────────
-
-function negClass(val: number | null | undefined): string {
-    if (val === null || val === undefined || val === 0) return '';
-    return val < 0 ? 'rpt-neg' : '';
-}
 
 function formatEmpty(val: number | null | undefined): string {
     if (val === null || val === undefined) return '';

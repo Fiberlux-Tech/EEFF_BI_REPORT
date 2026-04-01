@@ -1,6 +1,7 @@
 import type { CellSelection, DisplayColumn, ReportRow } from '@/types';
 import { formatNumber } from '@/utils/format';
 import { getCellValue, getDetailTotal } from '@/utils/cellValue';
+import { negClass } from '@/utils/classHelpers';
 
 interface DetailTableProps {
     title: string;
@@ -14,11 +15,6 @@ interface DetailTableProps {
     selection: CellSelection | null;
     onCellClick: (sel: CellSelection) => void;
     showTitle?: boolean;
-}
-
-function negClass(val: number | null | undefined): string {
-    if (val !== null && val !== undefined && val < 0) return 'rpt-neg';
-    return '';
 }
 
 export default function DetailTable({ title, rows, labelKeys, headerLabels, columns, year, partida, filterCol, selection, onCellClick, showTitle = true }: DetailTableProps) {

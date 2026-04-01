@@ -1,6 +1,7 @@
 import type { ReportRow, DisplayColumn } from '@/types';
 import { formatNumber } from '@/utils/format';
 import { getCellValue, getSummaryTotal, BOLD_ROWS_PL, BOLD_ROWS_BS } from '@/utils/cellValue';
+import { negClass } from '@/utils/classHelpers';
 
 interface FinancialTableProps {
     rows: ReportRow[];
@@ -8,11 +9,6 @@ interface FinancialTableProps {
     labelKey: string;
     showTotal?: boolean;
     variant: 'pl' | 'bs';
-}
-
-function negClass(val: number | null | undefined): string {
-    if (val !== null && val !== undefined && val < 0) return 'rpt-neg';
-    return '';
 }
 
 export default function FinancialTable({ rows, columns, labelKey, showTotal = false, variant }: FinancialTableProps) {

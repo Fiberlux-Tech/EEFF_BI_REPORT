@@ -20,6 +20,12 @@ TOTAL_COL = "TOTAL"
 ResultadoFinanciero = namedtuple("ResultadoFinanciero", ["ingresos", "gastos"])
 
 
+def ensure_month_columns(pivot: pd.DataFrame) -> pd.DataFrame:
+    """Reindex a pivot so all 12 month columns exist in JAN–DEC order, fill missing with 0."""
+    non_month_cols = [c for c in pivot.columns if c not in MONTH_NAMES_SET]
+    return pivot.reindex(columns=non_month_cols + MONTH_NAMES_LIST, fill_value=0)
+
+
 def pivot_by_month(df: pd.DataFrame, index_cols: list[str] | str, add_total: bool = False) -> pd.DataFrame:
     pivot = pd.pivot_table(
         df, values=SALDO, index=index_cols,
@@ -27,9 +33,7 @@ def pivot_by_month(df: pd.DataFrame, index_cols: list[str] | str, add_total: boo
     )
     pivot.columns = [MONTH_NAMES[int(c)] for c in pivot.columns]
     pivot = pivot.reset_index()
-    # Ensure all 12 month columns exist in calendar order (JAN–DEC), fill missing with 0
-    non_month_cols = [c for c in pivot.columns if c not in MONTH_NAMES_SET]
-    pivot = pivot.reindex(columns=non_month_cols + MONTH_NAMES_LIST, fill_value=0)
+    pivot = ensure_month_columns(pivot)
     if add_total:
         pivot[TOTAL_COL] = pivot[MONTH_NAMES_LIST].sum(axis=1)
     return pivot
@@ -162,8 +166,7 @@ def _apply_bs_cumsum(
 
     Returns (pivot_with_cumsum_applied, all_month_cols, display_month_cols).
     """
-    non_month_cols = [c for c in pivot.columns if c not in MONTH_NAMES_SET]
-    pivot = pivot.reindex(columns=non_month_cols + MONTH_NAMES_LIST, fill_value=0)
+    pivot = ensure_month_columns(pivot)
     pivot[MONTH_NAMES_LIST] = pivot[MONTH_NAMES_LIST].cumsum(axis=1)
     if keep_months is not None:
         display_cols = [c for c in MONTH_NAMES_LIST if c in keep_months]
