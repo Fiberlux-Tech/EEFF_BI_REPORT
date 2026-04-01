@@ -47,6 +47,7 @@ const VIEW_REGISTRY = [
     // ── Analisis ────────────────────────────────────────────────
     { id: 'analysis_pl_finanzas',   title: 'P&L - Finanzas',                     navLabel: 'P&L - Finanzas',              category: 'analysis' },
     { id: 'analysis_planilla',      title: 'Analisis de Planilla',               navLabel: 'Analisis de Planilla',        category: 'analysis' },
+    { id: 'analysis_proveedores',   title: 'Analisis de Proveedores',            navLabel: 'Analisis de Proveedores',     category: 'analysis' },
 ] as const satisfies readonly ViewEntry[];
 
 // ── Derived types ───────────────────────────────────────────────────────

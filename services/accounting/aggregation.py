@@ -118,6 +118,23 @@ def detail_planilla(df: pd.DataFrame,
     ).reset_index(drop=True)
 
 
+CECO_TRANSPORTE = "100.113.01"
+
+
+def detail_proveedores_transporte(df: pd.DataFrame) -> pd.DataFrame:
+    """Pivot COSTO DE TRANSPORTE (CECO 100.113.01) by NIT + RAZON_SOCIAL x month."""
+    filtered = df[df[CENTRO_COSTO] == CECO_TRANSPORTE]
+    if filtered.empty:
+        return pd.DataFrame()
+    filtered = filtered.copy()
+    filtered[NIT] = filtered[NIT].fillna("SIN NIT")
+    filtered[RAZON_SOCIAL] = filtered[RAZON_SOCIAL].fillna("SIN RAZON SOCIAL")
+    pivot = pivot_by_month(filtered, [NIT, RAZON_SOCIAL], add_total=True)
+    pivot = pivot.sort_values(TOTAL_COL, ascending=False).reset_index(drop=True)
+    pivot = append_total_row(pivot, RAZON_SOCIAL)
+    return pivot
+
+
 def split_resultado_financiero(res_fin_df: pd.DataFrame, sort_col: str = TOTAL_COL) -> ResultadoFinanciero:
     """Split a RESULTADO FINANCIERO DataFrame into ingresos (prefix '77') and gastos.
 

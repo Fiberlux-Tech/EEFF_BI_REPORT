@@ -58,6 +58,7 @@ export interface ReportData {
   participacion_by_cuenta: ReportRow[];
   provision_by_cuenta: ReportRow[];
   planilla_by_cuenta: ReportRow[];
+  proveedores_transporte: ReportRow[];
   // BS note detail tables
   bs_efectivo: ReportRow[];
   bs_cxc_comerciales: ReportRow[];

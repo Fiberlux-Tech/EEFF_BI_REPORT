@@ -3,6 +3,7 @@ import { useReport, isBsView } from '@/contexts/ReportContext';
 import FinancialTable from '@/features/dashboard/FinancialTable';
 import ExpandableFinancialTable from '@/features/dashboard/ExpandableFinancialTable';
 import PlanillaTable from '@/features/dashboard/PlanillaTable';
+import ProveedoresTable from '@/features/dashboard/ProveedoresTable';
 import PLNoteView from '@/features/dashboard/PLNoteView';
 import type { ReportData, TableConfig, ReportRow } from '@/types';
 import { VIEW_TABLE_CONFIGS, ALL_MONTHS, isAllZeroTable, type NoteView } from '@/config/viewConfigs';
@@ -147,6 +148,12 @@ export default function MainContent() {
             const plSummaryRows = getMergedRows('pl_summary', 'PARTIDA_PL', 'pl');
             const revenueRow = plSummaryRows.find(r => r['PARTIDA_PL'] === 'INGRESOS ORDINARIOS') ?? null;
             return <PlanillaTable rows={planillaRows} columns={plColumns} revenueRow={revenueRow} />;
+        }
+
+        if (currentView === 'analysis_proveedores') {
+            const proveedoresKeys = ['NIT', 'RAZON_SOCIAL'];
+            const proveedoresRows = getMergedDetailRows('proveedores_transporte', proveedoresKeys) ?? [];
+            return <ProveedoresTable rows={proveedoresRows} columns={plColumns} />;
         }
 
         if (currentView === 'pl') {
