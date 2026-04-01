@@ -22,6 +22,7 @@ from accounting.aggregation import (
     ensure_month_columns, preaggregate, sales_details, proyectos_especiales,
     detail_by_ceco, detail_by_cuenta, detail_ceco_by_cuenta,
     detail_resultado_financiero, detail_planilla,
+    detail_proveedores_transporte,
     bs_detail_by_cuenta, bs_top20_by_nit, append_total_row,
 )
 from accounting.statements import pl_summary, bs_summary
@@ -37,96 +38,101 @@ from config.fields import (
 logger = logging.getLogger("flxcontabilidad.data_service")
 
 
-# ── In-memory cache ─────────────────────────────────────────────────────
-# Keyed by (company, year). Each entry holds the transformed data + timestamp.
-# Protected by a lock for thread safety (gunicorn sync workers are separate
-# processes, so this is per-worker, which is fine).
-#
-# Bounded LRU + TTL: each store holds at most _CACHE_MAX_ENTRIES items.
-# Oldest entries are evicted when the limit is reached.
+# ── In-memory LRU+TTL cache ──────────────────────────────────────────────
 
-MEMORY_CACHE_TTL = 1800  # 30 minutes
-_CACHE_MAX_ENTRIES = 20  # per store (4 companies × 5 years is a reasonable max)
+class LRUTTLCache:
+    """Thread-safe LRU cache with per-entry TTL expiration.
 
-_cache_lock = threading.Lock()
-_STORES: dict[str, OrderedDict[tuple[str, int], tuple[float, object]]] = {
-    "result": OrderedDict(),
-    "df": OrderedDict(),
-    "bs": OrderedDict(),
-    "raw": OrderedDict(),
-    "pl_result": OrderedDict(),   # JSON-ready P&L-only response
-    "bs_result": OrderedDict(),   # JSON-ready BS-only response
-    "pl_df": OrderedDict(),       # pl_summary DataFrame (BS needs it for UTILIDAD NETA)
+    Keyed by (company, year) tuples. Each entry holds transformed data + timestamp.
+    """
+
+    def __init__(self, name: str, ttl: int = 1800, max_entries: int = 20):
+        self.name = name
+        self.ttl = ttl
+        self.max_entries = max_entries
+        self._store: OrderedDict[tuple[str, int], tuple[float, object]] = OrderedDict()
+        self._lock = threading.Lock()
+        self.hits = 0
+        self.misses = 0
+
+    def get(self, company: str, year: int):
+        """Return cached value or None if missing/expired."""
+        key = (company, year)
+        with self._lock:
+            entry = self._store.get(key)
+            if entry is None:
+                self.misses += 1
+                return None
+            if (time.time() - entry[0]) < self.ttl:
+                self._store.move_to_end(key)
+                self.hits += 1
+                return entry[1]
+            self.misses += 1
+            del self._store[key]
+        return None
+
+    def set(self, company: str, year: int, value) -> None:
+        """Store value with current timestamp, evicting LRU if full."""
+        key = (company, year)
+        with self._lock:
+            if key in self._store:
+                self._store.move_to_end(key)
+            self._store[key] = (time.time(), value)
+            while len(self._store) > self.max_entries:
+                self._store.popitem(last=False)
+
+    def pop(self, company: str, year: int) -> None:
+        """Remove a specific entry if it exists."""
+        key = (company, year)
+        with self._lock:
+            self._store.pop(key, None)
+
+    def clear(self) -> None:
+        """Remove all entries."""
+        with self._lock:
+            self._store.clear()
+
+    def stats(self) -> dict:
+        """Return hit/miss counters and current entry count."""
+        with self._lock:
+            return {"hits": self.hits, "misses": self.misses, "entries": len(self._store)}
+
+
+_caches: dict[str, LRUTTLCache] = {
+    "result": LRUTTLCache("result"),
+    "df": LRUTTLCache("df"),
+    "bs": LRUTTLCache("bs"),
+    "raw": LRUTTLCache("raw"),
+    "pl_result": LRUTTLCache("pl_result"),
+    "bs_result": LRUTTLCache("bs_result"),
+    "pl_df": LRUTTLCache("pl_df"),
 }
-
-# Cache observability — simple hit/miss counters per store
-_cache_stats: dict[str, dict[str, int]] = {
-    store: {"hits": 0, "misses": 0} for store in _STORES
-}
-
-
-def _get_from_cache(store: str, company: str, year: int):
-    """Return cached value from *store* or None if missing/expired."""
-    key = (company, year)
-    with _cache_lock:
-        entry = _STORES[store].get(key)
-        if entry is None:
-            _cache_stats[store]["misses"] += 1
-            return None
-        if (time.time() - entry[0]) < MEMORY_CACHE_TTL:
-            _STORES[store].move_to_end(key)  # mark as recently used
-            _cache_stats[store]["hits"] += 1
-            return entry[1]
-        _cache_stats[store]["misses"] += 1  # expired = miss
-        del _STORES[store][key]
-    return None
-
-
-def _set_in_cache(store: str, company: str, year: int, value) -> None:
-    """Store *value* in *store* with current timestamp, evicting LRU if full."""
-    key = (company, year)
-    with _cache_lock:
-        if key in _STORES[store]:
-            _STORES[store].move_to_end(key)
-        _STORES[store][key] = (time.time(), value)
-        while len(_STORES[store]) > _CACHE_MAX_ENTRIES:
-            _STORES[store].popitem(last=False)  # evict oldest
 
 
 # Public accessors used by routes.py
 def get_bs_cached(company: str, year: int) -> pd.DataFrame | None:
     """Return cached prepared BS DataFrame or None."""
-    return _get_from_cache("bs", company, year)
+    return _caches["bs"].get(company, year)
 
 
 def get_raw_cached(company: str, year: int) -> tuple | None:
     """Return cached raw DataFrames or None."""
-    return _get_from_cache("raw", company, year)
+    return _caches["raw"].get(company, year)
 
 
 def get_cache_stats() -> dict:
     """Return cache hit/miss counters and current entry counts per store."""
-    with _cache_lock:
-        return {
-            store: {
-                "hits": _cache_stats[store]["hits"],
-                "misses": _cache_stats[store]["misses"],
-                "entries": len(_STORES[store]),
-            }
-            for store in _STORES
-        }
+    return {name: cache.stats() for name, cache in _caches.items()}
 
 
 def invalidate_cache(company: str | None = None, year: int | None = None) -> None:
     """Clear cache entries. If both args are given, clear only that key."""
-    with _cache_lock:
-        if company and year:
-            key = (company, year)
-            for store in _STORES.values():
-                store.pop(key, None)
-        else:
-            for store in _STORES.values():
-                store.clear()
+    if company and year:
+        for cache in _caches.values():
+            cache.pop(company, year)
+    else:
+        for cache in _caches.values():
+            cache.clear()
 
 
 # ── DataFrame → JSON helpers ────────────────────────────────────────────
@@ -169,7 +175,7 @@ def load_report_data(company: str, year: int, *, force_refresh: bool = False) ->
         raise ValueError(f"Unknown company: {company!r}")
 
     if not force_refresh:
-        cached = _get_from_cache("result", company, year)
+        cached = _caches["result"].get(company, year)
         if cached:
             logger.info("Serving cached data for %s/%d", company, year)
             return cached
@@ -205,16 +211,16 @@ def load_report_data(company: str, year: int, *, force_refresh: bool = False) ->
         "months": MONTH_NAMES_LIST,
     }
 
-    _set_in_cache("result", company, year, result)
-    _set_in_cache("df", company, year, df_stmt)
+    _caches["result"].set(company, year, result)
+    _caches["df"].set(company, year, df_stmt)
     if df_bs is not None:
-        _set_in_cache("bs", company, year, df_bs)
-    _set_in_cache("raw", company, year, (raw, raw_current_full, raw_prev, raw_bs, raw_bs_prev))
+        _caches["bs"].set(company, year, df_bs)
+    _caches["raw"].set(company, year, (raw, raw_current_full, raw_prev, raw_bs, raw_bs_prev))
 
     # Cross-populate split caches so split endpoints get instant hits
-    _set_in_cache("pl_df", company, year, pl)
-    _set_in_cache("pl_result", company, year, {k: v for k, v in result.items() if k != "bs_summary"})
-    _set_in_cache("bs_result", company, year, {
+    _caches["pl_df"].set(company, year, pl)
+    _caches["pl_result"].set(company, year, {k: v for k, v in result.items() if k != "bs_summary"})
+    _caches["bs_result"].set(company, year, {
         "bs_summary": result["bs_summary"], "company": company, "year": year, "months": MONTH_NAMES_LIST,
     })
 
@@ -252,6 +258,7 @@ def _run_pl_transforms(raw_current_full: pd.DataFrame) -> tuple[pd.DataFrame, pd
     otros_egresos = detail_by_ceco(df_stmt, ["OTROS EGRESOS"], with_total_row=True, preagg=preagg)
     otros_egresos_by_cuenta = detail_by_cuenta(df_stmt, ["OTROS EGRESOS"], preagg=preagg)
     planilla_by_cuenta = detail_planilla(df_stmt, preagg=preagg)
+    proveedores_transporte = detail_proveedores_transporte(df_stmt)
 
     records = {
         "pl_summary": _df_to_records(pl),
@@ -275,6 +282,7 @@ def _run_pl_transforms(raw_current_full: pd.DataFrame) -> tuple[pd.DataFrame, pd
         "otros_egresos": _df_to_records(otros_egresos),
         "otros_egresos_by_cuenta": _df_to_records(otros_egresos_by_cuenta),
         "planilla_by_cuenta": _df_to_records(planilla_by_cuenta),
+        "proveedores_transporte": _df_to_records(proveedores_transporte),
     }
     return df_stmt, pl, records
 
@@ -288,16 +296,16 @@ def load_pl_data(company: str, year: int, *, force_refresh: bool = False) -> dic
         raise ValueError(f"Unknown company: {company!r}")
 
     if not force_refresh:
-        cached = _get_from_cache("pl_result", company, year)
+        cached = _caches["pl_result"].get(company, year)
         if cached:
             logger.info("Serving cached P&L data for %s/%d", company, year)
             return cached
         # If a full load was done before, extract P&L from it
-        full = _get_from_cache("result", company, year)
+        full = _caches["result"].get(company, year)
         if full:
             logger.info("Serving P&L from full cache for %s/%d", company, year)
             pl_result = {k: v for k, v in full.items() if k != "bs_summary"}
-            _set_in_cache("pl_result", company, year, pl_result)
+            _caches["pl_result"].set(company, year, pl_result)
             return pl_result
 
     t0 = time.perf_counter()
@@ -316,9 +324,9 @@ def load_pl_data(company: str, year: int, *, force_refresh: bool = False) -> dic
         "months": MONTH_NAMES_LIST,
     }
 
-    _set_in_cache("pl_result", company, year, result)
-    _set_in_cache("pl_df", company, year, pl)
-    _set_in_cache("df", company, year, df_stmt)
+    _caches["pl_result"].set(company, year, result)
+    _caches["pl_df"].set(company, year, pl)
+    _caches["df"].set(company, year, df_stmt)
     logger.info("Total load_pl_data: %.2fs", time.perf_counter() - t0)
 
     # Pre-fetch BS in background so it's ready when the user needs it
@@ -337,11 +345,11 @@ def load_bs_data(company: str, year: int, *, force_refresh: bool = False) -> dic
         raise ValueError(f"Unknown company: {company!r}")
 
     if not force_refresh:
-        cached = _get_from_cache("bs_result", company, year)
+        cached = _caches["bs_result"].get(company, year)
         if cached:
             logger.info("Serving cached BS data for %s/%d", company, year)
             return cached
-        full = _get_from_cache("result", company, year)
+        full = _caches["result"].get(company, year)
         if full:
             logger.info("Serving BS from full cache for %s/%d", company, year)
             # The old full cache may not have BS detail keys — fall through
@@ -349,17 +357,17 @@ def load_bs_data(company: str, year: int, *, force_refresh: bool = False) -> dic
             if "bs_efectivo" in full:
                 bs_result = {k: v for k, v in full.items()
                              if k == "bs_summary" or k.startswith("bs_") or k in ("company", "year", "months")}
-                _set_in_cache("bs_result", company, year, bs_result)
+                _caches["bs_result"].set(company, year, bs_result)
                 return bs_result
 
     t0 = time.perf_counter()
 
     # Ensure P&L summary is available (needed for Resultados del Ejercicio)
-    pl_df = _get_from_cache("pl_df", company, year)
+    pl_df = _caches["pl_df"].get(company, year)
     if pl_df is None:
         logger.info("P&L not cached for %s/%d — loading first (BS dependency)", company, year)
         load_pl_data(company, year)
-        pl_df = _get_from_cache("pl_df", company, year)
+        pl_df = _caches["pl_df"].get(company, year)
 
     raw_bs = fetch_bs_only(company, year)
     logger.info("BS fetch: %.2fs (%d rows)", time.perf_counter() - t0, len(raw_bs))
@@ -401,9 +409,9 @@ def load_bs_data(company: str, year: int, *, force_refresh: bool = False) -> dic
         for key, partidas in _BS_NIT_RANKINGS:
             result[key] = _df_to_records(bs_top20_by_nit(df_bs, partidas))
 
-    _set_in_cache("bs_result", company, year, result)
+    _caches["bs_result"].set(company, year, result)
     if df_bs is not None:
-        _set_in_cache("bs", company, year, df_bs)
+        _caches["bs"].set(company, year, df_bs)
     logger.info("Total load_bs_data: %.2fs", time.perf_counter() - t0)
 
     return result
@@ -420,7 +428,7 @@ def _prefetch_bs_background(company: str, year: int) -> None:
     key = (company, year)
     with _bg_lock:
         # Already cached or already in flight — skip
-        if _get_from_cache("bs_result", company, year) is not None:
+        if _caches["bs_result"].get(company, year) is not None:
             return
         existing = _bg_tasks.get(key)
         if existing is not None and existing.is_alive():
@@ -467,20 +475,20 @@ def get_detail_records(
     Checks P&L data first; if no match, falls back to BS data.
     """
     # Try P&L first
-    df = _get_from_cache("df", company, year)
+    df = _caches["df"].get(company, year)
     if df is None:
         load_pl_data(company, year, force_refresh=True)
-        df = _get_from_cache("df", company, year)
+        df = _caches["df"].get(company, year)
 
     partida_col = PARTIDA_PL
     if df is not None and (df[PARTIDA_PL] == partida).any():
         pass  # use P&L df
     else:
         # Fall back to BS
-        df_bs = _get_from_cache("bs", company, year)
+        df_bs = _caches["bs"].get(company, year)
         if df_bs is None:
             load_bs_data(company, year, force_refresh=True)
-            df_bs = _get_from_cache("bs", company, year)
+            df_bs = _caches["bs"].get(company, year)
         if df_bs is not None:
             df = df_bs
             partida_col = PARTIDA_BS
