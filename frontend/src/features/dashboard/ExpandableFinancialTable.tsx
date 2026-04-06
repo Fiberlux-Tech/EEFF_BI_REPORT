@@ -200,7 +200,7 @@ export default function ExpandableFinancialTable(props: ExpandableFinancialTable
                 <table className="rpt-table">
                     <thead>
                         <tr>
-                            <th className="text-left">Partida</th>
+                            <th className="text-left rpt-sticky">Partida</th>
                             {columns.map(col => (
                                 <th key={col.header}>{col.header}</th>
                             ))}
@@ -233,7 +233,7 @@ export default function ExpandableFinancialTable(props: ExpandableFinancialTable
                                         onClick={canExpand ? () => togglePartida(label) : undefined}
                                         style={canExpand ? { cursor: 'pointer' } : undefined}
                                     >
-                                        <td>
+                                        <td className="rpt-sticky">
                                             {canExpand && (
                                                 <span className="rpt-chevron">{isExpanded ? '\u25BE' : '\u25B8'}</span>
                                             )}
@@ -316,7 +316,7 @@ function CecoExpansion({ partida, cecoGroups, cuentaEntriesByCecoGroup, expanded
                             onClick={() => toggleCecoGroup(partida, group.label)}
                             style={{ cursor: 'pointer' }}
                         >
-                            <td>
+                            <td className="rpt-sticky">
                                 <span className="rpt-chevron">{isGroupExpanded ? '\u25BE' : '\u25B8'}</span>
                                 {group.label}
                             </td>
@@ -382,7 +382,7 @@ function CuentaEntryRows({ entries, parentKey, expandedCuentaCats, toggleCuentaC
                     const cuentaRow = entry.row;
                     return (
                         <tr key={`ug-${ei}`} className={`rpt-row-${leafLevel}`}>
-                            <td>
+                            <td className="rpt-sticky">
                                 {cuentaRow['CUENTA_CONTABLE']} {cuentaRow['DESCRIPCION']}
                             </td>
                             <NumCells row={cuentaRow} columns={columns} />
@@ -402,7 +402,7 @@ function CuentaEntryRows({ entries, parentKey, expandedCuentaCats, toggleCuentaC
                             onClick={() => toggleCuentaCat(catKey)}
                             style={{ cursor: 'pointer' }}
                         >
-                            <td>
+                            <td className="rpt-sticky">
                                 <span className="rpt-chevron">{isCatExpanded ? '\u25BE' : '\u25B8'}</span>
                                 {entry.label}
                             </td>
@@ -413,7 +413,7 @@ function CuentaEntryRows({ entries, parentKey, expandedCuentaCats, toggleCuentaC
                         {/* Individual cuenta rows */}
                         {isCatExpanded && entry.cuentaRows.map((cuentaRow, ki) => (
                             <tr key={`cr-${ki}`} className={`rpt-row-${leafLevel}`}>
-                                <td>
+                                <td className="rpt-sticky">
                                     {cuentaRow['CUENTA_CONTABLE']} {cuentaRow['DESCRIPCION']}
                                 </td>
                                 <NumCells row={cuentaRow} columns={columns} />

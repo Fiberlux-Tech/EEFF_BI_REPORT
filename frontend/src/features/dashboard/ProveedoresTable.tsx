@@ -37,10 +37,11 @@ export default function ProveedoresTable({ rows, columns }: ProveedoresTableProp
     };
 
     return (
+        <div className="overflow-x-auto">
         <table className="rpt-table" style={{ tableLayout: 'fixed' }}>
             <thead>
                 <tr>
-                    <th className="text-left" style={provColStyle}>NIT / Proveedor</th>
+                    <th className="text-left rpt-sticky" style={provColStyle}>NIT / Proveedor</th>
                     {columns.map(col => (
                         <th key={col.header}>{col.header}</th>
                     ))}
@@ -51,7 +52,7 @@ export default function ProveedoresTable({ rows, columns }: ProveedoresTableProp
                 {/* Total row at top */}
                 {totalRow && (
                     <tr className="rpt-row-total">
-                        <td style={provColStyle}>COSTO DE TRANSPORTE</td>
+                        <td className="rpt-sticky" style={provColStyle}>COSTO DE TRANSPORTE</td>
                         {columns.map(col => {
                             const val = getCellValue(totalRow, col);
                             return (
@@ -74,7 +75,7 @@ export default function ProveedoresTable({ rows, columns }: ProveedoresTableProp
                     const total = getDetailTotal(row, columns);
                     return (
                         <tr key={idx} className="rpt-row-data">
-                            <td style={provColStyle} title={label}>{label}</td>
+                            <td className="rpt-sticky" style={provColStyle} title={label}>{label}</td>
                             {columns.map(col => {
                                 const val = getCellValue(row, col);
                                 return (
@@ -91,5 +92,6 @@ export default function ProveedoresTable({ rows, columns }: ProveedoresTableProp
                 })}
             </tbody>
         </table>
+        </div>
     );
 }

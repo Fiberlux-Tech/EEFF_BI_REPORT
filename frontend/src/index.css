@@ -34,11 +34,11 @@
 
   /* ─── Base table ─── */
   .rpt-table {
-    @apply w-full border-collapse;
+    @apply min-w-full border-collapse;
     table-layout: fixed;
   }
   .rpt-table-auto {
-    @apply w-full border-collapse;
+    @apply min-w-full border-collapse;
     table-layout: auto;
   }
 
@@ -56,6 +56,10 @@
     @apply text-left;
     padding-left: 0;
     width: 380px;
+  }
+  .rpt-table th:not(:first-child),
+  .rpt-table-auto th:not(:first-child) {
+    min-width: 90px;
   }
   .rpt-table th:last-child,
   .rpt-table-auto th:last-child { padding-right: 0; }
@@ -235,26 +239,39 @@
     letter-spacing: 2px;
   }
 
-  /* ─── Metric sub-column (HC, Gasto/HC) in Planilla ─── */
+  /* ─── Metric sub-column (HC, S//HC) — narrow, left-aligned, blue text ─── */
   .rpt-col-metric {
-    background: rgba(59, 130, 246, 0.04);
-    font-size: 11px;
-    color: #888;
-    min-width: 52px;
-    width: 56px;
-    padding-left: 6px;
-    padding-right: 6px;
+    font-size: 9px;
+    font-weight: 400;
+    color: #7baaf0;
+    text-align: left !important;
+    min-width: 28px;
+    width: 32px;
+    padding-left: 2px;
+    padding-right: 8px;
+    border-right: 1px solid #eee;
   }
   th.rpt-col-metric {
-    background: rgba(59, 130, 246, 0.06);
-    color: #2563EB;
-    font-weight: 600;
+    font-size: 8px;
+    font-weight: 400;
+    color: #a3bfea;
+    border-right: 1px solid #eee;
+    min-width: 28px !important;
   }
   .rpt-row-total td.rpt-col-metric {
-    background: rgba(59, 130, 246, 0.06);
+    font-weight: 400;
+    color: #7baaf0;
   }
-  .rpt-row-highlight td.rpt-col-metric {
-    background: rgba(59, 130, 246, 0.04);
+
+  /* ─── Inactive month cells ─── */
+  .rpt-inactive {
+    color: #ccc;
+  }
+
+  /* ─── Total column visual break ─── */
+  td.rpt-col-total-val,
+  th.rpt-col-total-val {
+    border-left: 2px solid #ddd;
   }
 
   /* ─── Sticky first column ─── */

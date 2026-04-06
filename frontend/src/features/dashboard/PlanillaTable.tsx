@@ -168,150 +168,115 @@ function perWorkerValue(costVal: number | null, headcount: number | null | undef
 function formatPerWorker(value: number | null | undefined): string {
     if (value === null || value === undefined) return '';
     if (value === 0) return '';
-    return formatNumber(value);
+    return formatNumber(Math.round(value));
 }
 
-// ── Headcount aggregation helpers ──────────────────────────────────
+// ── Headcount / per-worker aggregation ──────────────────────────────
 
-/** Sum headcounts across CECOs for a partida, per month. */
-function partidaHeadcountCells({
-    partida, headcountMap, columns,
-}: {
-    partida: PlanillaPartida;
-    headcountMap: HeadcountMap;
-    columns: DisplayColumn[];
-}) {
-    const cells = columns.map(col => {
-        let totalHc = 0;
-        for (const ceco of partida.cecos) {
-            const cecoHc = headcountMap[ceco.code];
-            if (!cecoHc) continue;
-            const hc = cecoHc[col.sourceMonths[0]];
-            if (hc && hc > 0) totalHc += hc;
-        }
-        return { key: col.header, hc: totalHc > 0 ? totalHc : null };
-    });
-
-    let totalHc = 0;
+function partidaHcPerCol(partida: PlanillaPartida, headcountMap: HeadcountMap, col: DisplayColumn): number | null {
+    let total = 0;
     for (const ceco of partida.cecos) {
-        const cecoHc = headcountMap[ceco.code];
-        if (!cecoHc?.['TOTAL_AVG'] || cecoHc['TOTAL_AVG'] <= 0) continue;
-        totalHc += cecoHc['TOTAL_AVG'];
+        const hc = headcountMap[ceco.code]?.[col.sourceMonths[0]];
+        if (hc && hc > 0) total += hc;
     }
-    return { cells, totalHc: totalHc > 0 ? Math.round(totalHc) : null };
+    return total > 0 ? total : null;
 }
 
-/** Sum headcounts across all CECOs in all partidas, per month. */
-function grandTotalHeadcount({
-    partidas, headcountMap, columns,
-}: {
-    partidas: PlanillaPartida[];
-    headcountMap: HeadcountMap;
-    columns: DisplayColumn[];
-}) {
-    const cells = columns.map(col => {
-        let totalHc = 0;
-        for (const p of partidas) {
-            for (const ceco of p.cecos) {
-                const cecoHc = headcountMap[ceco.code];
-                if (!cecoHc) continue;
-                const hc = cecoHc[col.sourceMonths[0]];
-                if (hc && hc > 0) totalHc += hc;
-            }
-        }
-        return { key: col.header, hc: totalHc > 0 ? totalHc : null };
-    });
+function partidaHcAvg(partida: PlanillaPartida, headcountMap: HeadcountMap): number | null {
+    let total = 0;
+    for (const ceco of partida.cecos) {
+        const avg = headcountMap[ceco.code]?.['TOTAL_AVG'];
+        if (avg && avg > 0) total += avg;
+    }
+    return total > 0 ? Math.round(total) : null;
+}
 
-    let totalHc = 0;
+function partidaPwPerCol(partida: PlanillaPartida, headcountMap: HeadcountMap, col: DisplayColumn): number | null {
+    let costSum = 0, hcSum = 0;
+    for (const ceco of partida.cecos) {
+        const hc = headcountMap[ceco.code]?.[col.sourceMonths[0]];
+        if (!hc || hc <= 0) continue;
+        costSum += (ceco.totals[col.sourceMonths[0]] ?? 0);
+        hcSum += hc;
+    }
+    return hcSum > 0 ? costSum / hcSum : null;
+}
+
+function partidaPwAvg(partida: PlanillaPartida, headcountMap: HeadcountMap): number | null {
+    let costSum = 0, hcSum = 0;
+    for (const ceco of partida.cecos) {
+        const avg = headcountMap[ceco.code]?.['TOTAL_AVG'];
+        if (!avg || avg <= 0) continue;
+        costSum += (ceco.totals['TOTAL'] ?? 0);
+        hcSum += avg;
+    }
+    return hcSum > 0 ? costSum / hcSum : null;
+}
+
+function grandHcPerCol(partidas: PlanillaPartida[], headcountMap: HeadcountMap, col: DisplayColumn): number | null {
+    let total = 0;
+    for (const p of partidas) {
+        const v = partidaHcPerCol(p, headcountMap, col);
+        if (v) total += v;
+    }
+    return total > 0 ? total : null;
+}
+
+function grandHcAvg(partidas: PlanillaPartida[], headcountMap: HeadcountMap): number | null {
+    let total = 0;
+    for (const p of partidas) {
+        const v = partidaHcAvg(p, headcountMap);
+        if (v) total += v;
+    }
+    return total > 0 ? total : null;
+}
+
+function grandPwPerCol(partidas: PlanillaPartida[], headcountMap: HeadcountMap, col: DisplayColumn): number | null {
+    let costSum = 0, hcSum = 0;
     for (const p of partidas) {
         for (const ceco of p.cecos) {
-            const cecoHc = headcountMap[ceco.code];
-            if (!cecoHc?.['TOTAL_AVG'] || cecoHc['TOTAL_AVG'] <= 0) continue;
-            totalHc += cecoHc['TOTAL_AVG'];
-        }
-    }
-    return { cells, totalHc: totalHc > 0 ? Math.round(totalHc) : null };
-}
-
-/** Compute weighted per-worker values for a partida (sum costs / sum headcounts). */
-function partidaPerWorkerCells({
-    partida, headcountMap, columns,
-}: {
-    partida: PlanillaPartida;
-    headcountMap: HeadcountMap;
-    columns: DisplayColumn[];
-}) {
-    const cells = columns.map(col => {
-        let totalCost = 0;
-        let totalHc = 0;
-        for (const ceco of partida.cecos) {
-            const cecoHc = headcountMap[ceco.code];
-            if (!cecoHc) continue;
-            const hc = cecoHc[col.sourceMonths[0]];
+            const hc = headcountMap[ceco.code]?.[col.sourceMonths[0]];
             if (!hc || hc <= 0) continue;
-            totalCost += (ceco.totals[col.sourceMonths[0]] ?? 0);
-            totalHc += hc;
+            costSum += (ceco.totals[col.sourceMonths[0]] ?? 0);
+            hcSum += hc;
         }
-        const pw = totalHc > 0 ? totalCost / totalHc : null;
-        return { key: col.header, pw };
-    });
-
-    let totalCost = 0;
-    let totalHc = 0;
-    for (const ceco of partida.cecos) {
-        const cecoHc = headcountMap[ceco.code];
-        if (!cecoHc?.['TOTAL_AVG'] || cecoHc['TOTAL_AVG'] <= 0) continue;
-        totalCost += (ceco.totals['TOTAL'] ?? 0);
-        totalHc += cecoHc['TOTAL_AVG'];
     }
-    const totalPw = totalHc > 0 ? totalCost / totalHc : null;
-
-    return { cells, totalPw };
+    return hcSum > 0 ? costSum / hcSum : null;
 }
 
-/** Compute grand-total per-worker (weighted across all CECOs with headcount). */
-function grandTotalPerWorker({
-    partidas, headcountMap, columns,
-}: {
-    partidas: PlanillaPartida[];
-    headcountMap: HeadcountMap;
-    columns: DisplayColumn[];
-}) {
-    const cells = columns.map(col => {
-        let totalCost = 0;
-        let totalHc = 0;
-        for (const p of partidas) {
-            for (const ceco of p.cecos) {
-                const cecoHc = headcountMap[ceco.code];
-                if (!cecoHc) continue;
-                const hc = cecoHc[col.sourceMonths[0]];
-                if (!hc || hc <= 0) continue;
-                totalCost += (ceco.totals[col.sourceMonths[0]] ?? 0);
-                totalHc += hc;
-            }
-        }
-        return { key: col.header, pw: totalHc > 0 ? totalCost / totalHc : null };
-    });
-
-    let totalCost = 0;
-    let totalHc = 0;
+function grandPwAvg(partidas: PlanillaPartida[], headcountMap: HeadcountMap): number | null {
+    let costSum = 0, hcSum = 0;
     for (const p of partidas) {
         for (const ceco of p.cecos) {
-            const cecoHc = headcountMap[ceco.code];
-            if (!cecoHc?.['TOTAL_AVG'] || cecoHc['TOTAL_AVG'] <= 0) continue;
-            totalCost += (ceco.totals['TOTAL'] ?? 0);
-            totalHc += cecoHc['TOTAL_AVG'];
+            const avg = headcountMap[ceco.code]?.['TOTAL_AVG'];
+            if (!avg || avg <= 0) continue;
+            costSum += (ceco.totals['TOTAL'] ?? 0);
+            hcSum += avg;
         }
     }
-    return { cells, totalPw: totalHc > 0 ? totalCost / totalHc : null };
+    return hcSum > 0 ? costSum / hcSum : null;
+}
+
+// ── Metric formatting ─────────────────────────────────────────────
+
+function fmtHc(hc: number | null): string {
+    return hc != null && hc > 0 ? String(Math.round(hc)) : '';
+}
+
+function fmtPw(pw: number | null): string {
+    return pw !== null && pw !== 0 ? formatPerWorker(pw) : '';
 }
 
 // ── Cell renderers ──────────────────────────────────────────────────
 
-function NumCells({ row, columns }: { row: Record<string, number> | ReportRow; columns: DisplayColumn[] }) {
+/** Standard numeric cells (no metric sub-column). */
+function NumCells({ row, columns, activeHeaders }: { row: Record<string, number> | ReportRow; columns: DisplayColumn[]; activeHeaders?: Set<string> }) {
     return (
         <>
             {columns.map(col => {
+                if (activeHeaders && !activeHeaders.has(col.header)) {
+                    return <td key={col.header} className="rpt-inactive">{'\u2014'}</td>;
+                }
                 const val = getCellValue(row as ReportRow, col);
                 return (
                     <td key={col.header} className={negClass(val)}>
@@ -323,14 +288,49 @@ function NumCells({ row, columns }: { row: Record<string, number> | ReportRow; c
     );
 }
 
-function TotalCell({ val }: { val: number | null }) {
-    return <td className={negClass(val)}>{formatEmpty(val)}</td>;
-}
-
-function NumCellsPct({ row, revenueRow, columns }: { row: Record<string, number> | ReportRow; revenueRow: ReportRow; columns: DisplayColumn[] }) {
+/** Amount + metric sub-column pair, per column. getMetric returns the formatted string for the metric td. */
+function NumCellsDual({
+    row, columns, activeHeaders, getMetric,
+}: {
+    row: Record<string, number> | ReportRow;
+    columns: DisplayColumn[];
+    activeHeaders?: Set<string>;
+    getMetric: (col: DisplayColumn) => string;
+}) {
     return (
         <>
             {columns.map(col => {
+                if (activeHeaders && !activeHeaders.has(col.header)) {
+                    return (
+                        <Fragment key={col.header}>
+                            <td className="rpt-inactive">{'\u2014'}</td>
+                            <td className="rpt-col-metric"></td>
+                        </Fragment>
+                    );
+                }
+                const val = getCellValue(row as ReportRow, col);
+                return (
+                    <Fragment key={col.header}>
+                        <td className={negClass(val)}>{formatEmpty(val)}</td>
+                        <td className="rpt-col-metric">{getMetric(col)}</td>
+                    </Fragment>
+                );
+            })}
+        </>
+    );
+}
+
+function TotalCell({ val }: { val: number | null }) {
+    return <td className={`rpt-col-total-val ${negClass(val)}`}>{formatEmpty(val)}</td>;
+}
+
+function NumCellsPct({ row, revenueRow, columns, activeHeaders }: { row: Record<string, number> | ReportRow; revenueRow: ReportRow; columns: DisplayColumn[]; activeHeaders?: Set<string> }) {
+    return (
+        <>
+            {columns.map(col => {
+                if (activeHeaders && !activeHeaders.has(col.header)) {
+                    return <td key={col.header}></td>;
+                }
                 const costVal = getCellValue(row as ReportRow, col);
                 const revVal = getCellValue(revenueRow, col);
                 const pct = pctValue(costVal, revVal);
@@ -346,64 +346,7 @@ function NumCellsPct({ row, revenueRow, columns }: { row: Record<string, number>
 
 function TotalCellPct({ costVal, revenueVal }: { costVal: number | null; revenueVal: number | null }) {
     const pct = pctValue(costVal, revenueVal);
-    return <td className={pct !== null && pct < 0 ? 'rpt-neg' : ''}>{formatPercent(pct)}</td>;
-}
-
-// ── Dual-column cell renderers (amount + metric) ────────────────────
-
-/** Revenue / empty metric: amount + em-dash in metric column */
-function NumCellsWithEmptyMetric({ row, columns }: { row: Record<string, number> | ReportRow; columns: DisplayColumn[] }) {
-    return (
-        <>
-            {columns.map(col => {
-                const val = getCellValue(row as ReportRow, col);
-                return (
-                    <Fragment key={col.header}>
-                        <td className={negClass(val)}>{formatEmpty(val)}</td>
-                        <td className="rpt-col-metric">{'\u2014'}</td>
-                    </Fragment>
-                );
-            })}
-        </>
-    );
-}
-
-/** CECO-level: amount + HC or amount + Gasto/HC */
-function NumCellsCecoMetric({
-    row, cecoCode, headcountMap, columns, mode,
-}: {
-    row: Record<string, number>;
-    cecoCode: string;
-    headcountMap: HeadcountMap;
-    columns: DisplayColumn[];
-    mode: 'headcount' | 'gasto_hc';
-}) {
-    const cecoHc = headcountMap[cecoCode] ?? null;
-    return (
-        <>
-            {columns.map(col => {
-                const val = getCellValue(row as ReportRow, col);
-                const hc = cecoHc ? cecoHc[col.sourceMonths[0]] ?? null : null;
-                if (mode === 'headcount') {
-                    return (
-                        <Fragment key={col.header}>
-                            <td className={negClass(val)}>{formatEmpty(val)}</td>
-                            <td className="rpt-col-metric">{hc != null && hc > 0 ? hc : '\u2014'}</td>
-                        </Fragment>
-                    );
-                }
-                const pw = perWorkerValue(val, hc);
-                return (
-                    <Fragment key={col.header}>
-                        <td className={negClass(val)}>{formatEmpty(val)}</td>
-                        <td className={`rpt-col-metric ${negClass(pw)}`}>
-                            {pw !== null ? formatPerWorker(pw) : '\u2014'}
-                        </td>
-                    </Fragment>
-                );
-            })}
-        </>
-    );
+    return <td className={`rpt-col-total-val ${pct !== null && pct < 0 ? 'rpt-neg' : ''}`}>{formatPercent(pct)}</td>;
 }
 
 // ── Table headers ──────────────────────────────────────────────────
@@ -412,39 +355,29 @@ function TableHead({ columns }: { columns: DisplayColumn[] }) {
     return (
         <thead>
             <tr>
-                <th>Concepto</th>
+                <th className="rpt-sticky">Concepto</th>
                 {columns.map(col => (
                     <th key={col.header}>{col.header}</th>
                 ))}
-                <th className="rpt-col-total">Total</th>
+                <th className="rpt-col-total rpt-col-total-val">Total</th>
             </tr>
         </thead>
     );
 }
 
-function TableHeadWithMetric({ columns, metricLabel }: { columns: DisplayColumn[]; metricLabel: string }) {
+function TableHeadDual({ columns, metricLabel }: { columns: DisplayColumn[]; metricLabel: string }) {
     return (
         <thead>
             <tr>
-                <th rowSpan={2} style={{ verticalAlign: 'bottom' }}>Concepto</th>
-                {columns.map(col => (
-                    <th key={col.header} colSpan={2} style={{ textAlign: 'center', borderBottom: '1px solid #ddd' }}>
-                        {col.header}
-                    </th>
-                ))}
-                <th colSpan={2} className="rpt-col-total" style={{ textAlign: 'center', borderBottom: '1px solid #ddd' }}>
-                    Total
-                </th>
-            </tr>
-            <tr>
+                <th className="rpt-sticky">Concepto</th>
                 {columns.map(col => (
                     <Fragment key={col.header}>
-                        <th style={{ fontSize: '9px' }}>S/</th>
-                        <th className="rpt-col-metric" style={{ fontSize: '9px' }}>{metricLabel}</th>
+                        <th>{col.header}</th>
+                        <th className="rpt-col-metric">{metricLabel}</th>
                     </Fragment>
                 ))}
-                <th className="rpt-col-total" style={{ fontSize: '9px' }}>S/</th>
-                <th className="rpt-col-total rpt-col-metric" style={{ fontSize: '9px' }}>{metricLabel === 'HC' ? 'Prom' : metricLabel}</th>
+                <th className="rpt-col-total rpt-col-total-val">Total</th>
+                <th className="rpt-col-metric">{metricLabel === 'HC' ? 'HC Prom' : metricLabel}</th>
             </tr>
         </thead>
     );
@@ -461,6 +394,7 @@ interface PlanillaTableProps {
 
 export default function PlanillaTable({ rows, columns, revenueRow, headcountMap }: PlanillaTableProps) {
     const [expandedPartidas, setExpandedPartidas] = useState<Set<string>>(new Set());
+    const [expandedCecos, setExpandedCecos] = useState<Set<string>>(new Set());
     const [expandedPctPartidas, setExpandedPctPartidas] = useState<Set<string>>(new Set());
     const [expandedPctCecos, setExpandedPctCecos] = useState<Set<string>>(new Set());
     const [planillaFilter, setPlanillaFilter] = useState<PlanillaFilter>('all');
@@ -475,11 +409,39 @@ export default function PlanillaTable({ rows, columns, revenueRow, headcountMap 
 
     const { partidas, grandTotal } = useMemo(() => buildHierarchy(filteredRows, columns), [filteredRows, columns]);
 
+    const activeHeaders = useMemo(() => {
+        const s = new Set<string>();
+        if (!revenueRow) return s;
+        for (const col of columns) {
+            const val = getCellValue(revenueRow, col);
+            if (val !== null && val !== undefined && val !== 0) s.add(col.header);
+        }
+        return s;
+    }, [revenueRow, columns]);
+
     const togglePartida = (name: string) => {
         setExpandedPartidas(prev => {
             const next = new Set(prev);
-            if (next.has(name)) next.delete(name);
-            else next.add(name);
+            if (next.has(name)) {
+                next.delete(name);
+                setExpandedCecos(prev2 => {
+                    const next2 = new Set(prev2);
+                    for (const key of next2) if (key.startsWith(name + '|')) next2.delete(key);
+                    return next2;
+                });
+            } else {
+                next.add(name);
+            }
+            return next;
+        });
+    };
+
+    const toggleCeco = (partida: string, cecoCode: string) => {
+        const key = `${partida}|${cecoCode}`;
+        setExpandedCecos(prev => {
+            const next = new Set(prev);
+            if (next.has(key)) next.delete(key);
+            else next.add(key);
             return next;
         });
     };
@@ -520,61 +482,62 @@ export default function PlanillaTable({ rows, columns, revenueRow, headcountMap 
 
     return (
         <div>
-            {/* ── Filter Tabs ── */}
-            <nav className="flex items-baseline gap-10 mb-6">
-                <span className="text-[11px] font-semibold uppercase text-txt-muted" style={{ letterSpacing: '1.2px' }}>
-                    Tipo
-                </span>
-                <div className="flex gap-8">
-                    {FILTER_OPTIONS.map(opt => (
-                        <button
-                            key={opt.value}
-                            onClick={() => setPlanillaFilter(opt.value)}
-                            className={`text-[13px] bg-transparent border-none cursor-pointer pb-1.5 transition-all
-                                ${planillaFilter === opt.value
-                                    ? 'text-txt font-semibold border-b-[3px] border-b-txt'
-                                    : 'text-txt-muted font-normal border-b-2 border-b-transparent hover:text-txt-secondary'
-                                }`}
-                            style={{ letterSpacing: '0.2px' }}
-                        >
-                            {opt.label}
-                        </button>
-                    ))}
-                </div>
-            </nav>
-
-            {/* ── Metric Toggle ── */}
-            {hasHeadcount && (
-                <nav className="flex items-center gap-3 mb-10">
-                    <span className="text-[11px] font-semibold uppercase text-txt-muted mr-1" style={{ letterSpacing: '1.2px' }}>
-                        Metrica
+            {/* ── Filter Bar (TIPO + METRICA on one row) ── */}
+            <nav className="flex items-center justify-between mb-10">
+                <div className="flex items-baseline gap-10">
+                    <span className="text-[11px] font-semibold uppercase text-txt-muted" style={{ letterSpacing: '1.2px' }}>
+                        Tipo
                     </span>
-                    <div className="inline-flex rounded-md overflow-hidden" style={{ border: '1px solid #cbd5e1' }}>
-                        {METRIC_OPTIONS.map(opt => (
+                    <div className="flex gap-8">
+                        {FILTER_OPTIONS.map(opt => (
                             <button
                                 key={opt.value}
-                                onClick={() => setMetricMode(opt.value)}
-                                className={`px-3 py-1.5 text-[11px] font-medium transition-all whitespace-nowrap border-none cursor-pointer
-                                    ${metricMode === opt.value
-                                        ? 'text-white'
-                                        : 'bg-white hover:bg-blue-50'
+                                onClick={() => setPlanillaFilter(opt.value)}
+                                className={`text-[13px] bg-transparent border-none cursor-pointer pb-1.5 transition-all
+                                    ${planillaFilter === opt.value
+                                        ? 'text-txt font-semibold border-b-[3px] border-b-txt'
+                                        : 'text-txt-muted font-normal border-b-2 border-b-transparent hover:text-txt-secondary'
                                     }`}
-                                style={metricMode === opt.value
-                                    ? { background: '#2563EB', color: '#fff' }
-                                    : { color: '#64748b' }
-                                }
+                                style={{ letterSpacing: '0.2px' }}
                             >
                                 {opt.label}
                             </button>
                         ))}
                     </div>
-                </nav>
-            )}
+                </div>
+                {hasHeadcount && (
+                    <div className="flex items-center gap-3">
+                        <span className="text-[11px] font-semibold uppercase text-txt-muted mr-1" style={{ letterSpacing: '1.2px' }}>
+                            Metrica
+                        </span>
+                        <div className="inline-flex rounded-md overflow-hidden" style={{ border: '1px solid #cbd5e1' }}>
+                            {METRIC_OPTIONS.map(opt => (
+                                <button
+                                    key={opt.value}
+                                    onClick={() => setMetricMode(opt.value)}
+                                    className={`px-3 py-1.5 text-[11px] font-medium transition-all whitespace-nowrap border-none cursor-pointer
+                                        ${metricMode === opt.value
+                                            ? 'text-white'
+                                            : 'bg-white hover:bg-blue-50'
+                                        }`}
+                                    style={metricMode === opt.value
+                                        ? { background: '#2563EB', color: '#fff' }
+                                        : { color: '#64748b' }
+                                    }
+                                >
+                                    {opt.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+            </nav>
 
-            {/* ═══ TABLE 1: COSTS (L0 → L1 only, with optional metric sub-column) ═══ */}
+            {/* ═══ TABLE 1: COSTS ═══ */}
+            <div className="overflow-x-auto">
             <table className={isDual ? 'rpt-table-auto' : 'rpt-table'}>
                 {isDual
-                    ? <TableHeadWithMetric columns={columns} metricLabel={metricLabel} />
+                    ? <TableHeadDual columns={columns} metricLabel={metricLabel} />
                     : <TableHead columns={columns} />
                 }
                 <tbody>
@@ -582,16 +545,16 @@ export default function PlanillaTable({ rows, columns, revenueRow, headcountMap 
                     {revenueRow && (
                         <>
                             <tr className="rpt-row-highlight">
-                                <td>Ingresos Ordinarios</td>
+                                <td className="rpt-sticky">Ingresos Ordinarios</td>
                                 {isDual ? (
                                     <>
-                                        <NumCellsWithEmptyMetric row={revenueRow} columns={columns} />
+                                        <NumCellsDual row={revenueRow} columns={columns} activeHeaders={activeHeaders} getMetric={() => ''} />
                                         <TotalCell val={revenueRow['TOTAL'] as number | null} />
-                                        <td className="rpt-col-metric">{'\u2014'}</td>
+                                        <td className="rpt-col-metric"></td>
                                     </>
                                 ) : (
                                     <>
-                                        <NumCells row={revenueRow} columns={columns} />
+                                        <NumCells row={revenueRow} columns={columns} activeHeaders={activeHeaders} />
                                         <TotalCell val={revenueRow['TOTAL'] as number | null} />
                                     </>
                                 )}
@@ -604,171 +567,148 @@ export default function PlanillaTable({ rows, columns, revenueRow, headcountMap 
                     {partidas.map((partida) => {
                         const isExpanded = expandedPartidas.has(partida.name);
 
+                        const getPartidaMetric = (col: DisplayColumn): string => {
+                            if (!headcountMap) return '';
+                            if (metricMode === 'headcount') return fmtHc(partidaHcPerCol(partida, headcountMap, col));
+                            return fmtPw(partidaPwPerCol(partida, headcountMap, col));
+                        };
+
+                        const partidaTotalMetric = (): string => {
+                            if (!headcountMap) return '';
+                            if (metricMode === 'headcount') return fmtHc(partidaHcAvg(partida, headcountMap));
+                            return fmtPw(partidaPwAvg(partida, headcountMap));
+                        };
+
                         return (
                             <Fragment key={partida.name}>
                                 {/* L0: Partida */}
                                 <tr className="rpt-row-l0" onClick={() => togglePartida(partida.name)}>
-                                    <td>
+                                    <td className="rpt-sticky">
                                         <span className="rpt-chevron">{isExpanded ? '\u25BE' : '\u25B8'}</span>
                                         {partida.name}
                                     </td>
                                     {isDual ? (
                                         <>
-                                            {metricMode === 'headcount' ? (() => {
-                                                const { cells: hcCells, totalHc } = partidaHeadcountCells({ partida, headcountMap: headcountMap!, columns });
-                                                return (
-                                                    <>
-                                                        {hcCells.map((c, i) => {
-                                                            const val = getCellValue(partida.totals as ReportRow, columns[i]);
-                                                            return (
-                                                                <Fragment key={c.key}>
-                                                                    <td className={negClass(val)}>{formatEmpty(val)}</td>
-                                                                    <td className="rpt-col-metric">{c.hc ?? '\u2014'}</td>
-                                                                </Fragment>
-                                                            );
-                                                        })}
-                                                        <TotalCell val={partida.totals['TOTAL'] ?? null} />
-                                                        <td className="rpt-col-metric">{totalHc ?? '\u2014'}</td>
-                                                    </>
-                                                );
-                                            })() : (() => {
-                                                const { cells: pwCells, totalPw } = partidaPerWorkerCells({ partida, headcountMap: headcountMap!, columns });
-                                                return (
-                                                    <>
-                                                        {pwCells.map((c, i) => {
-                                                            const val = getCellValue(partida.totals as ReportRow, columns[i]);
-                                                            return (
-                                                                <Fragment key={c.key}>
-                                                                    <td className={negClass(val)}>{formatEmpty(val)}</td>
-                                                                    <td className={`rpt-col-metric ${negClass(c.pw)}`}>
-                                                                        {c.pw !== null ? formatPerWorker(c.pw) : '\u2014'}
-                                                                    </td>
-                                                                </Fragment>
-                                                            );
-                                                        })}
-                                                        <TotalCell val={partida.totals['TOTAL'] ?? null} />
-                                                        <td className={`rpt-col-metric ${negClass(totalPw)}`}>
-                                                            {totalPw !== null ? formatPerWorker(totalPw) : '\u2014'}
-                                                        </td>
-                                                    </>
-                                                );
-                                            })()}
+                                            <NumCellsDual row={partida.totals as ReportRow} columns={columns} activeHeaders={activeHeaders} getMetric={getPartidaMetric} />
+                                            <TotalCell val={partida.totals['TOTAL'] ?? null} />
+                                            <td className="rpt-col-metric">{partidaTotalMetric()}</td>
                                         </>
                                     ) : (
                                         <>
-                                            <NumCells row={partida.totals as ReportRow} columns={columns} />
+                                            <NumCells row={partida.totals as ReportRow} columns={columns} activeHeaders={activeHeaders} />
                                             <TotalCell val={partida.totals['TOTAL'] ?? null} />
                                         </>
                                     )}
                                 </tr>
 
-                                {/* L1: CECOs (non-expandable leaf in this table) */}
-                                {isExpanded && partida.cecos.map((ceco) => (
-                                    <tr key={`${partida.name}|${ceco.code}`} className="rpt-row-l1">
-                                        <td style={{ cursor: 'default' }}>
-                                            {ceco.code} {ceco.desc}
-                                        </td>
-                                        {isDual ? (
-                                            <>
-                                                <NumCellsCecoMetric
-                                                    row={ceco.totals}
-                                                    cecoCode={ceco.code}
-                                                    headcountMap={headcountMap!}
-                                                    columns={columns}
-                                                    mode={metricMode as 'headcount' | 'gasto_hc'}
-                                                />
-                                                {metricMode === 'headcount' ? (
+                                {/* L1: CECOs */}
+                                {isExpanded && partida.cecos.map((ceco) => {
+                                    const cecoExpanded = expandedCecos.has(`${partida.name}|${ceco.code}`);
+                                    const cecoHcData = headcountMap?.[ceco.code] ?? null;
+                                    const cecoHcAvg = cecoHcData?.['TOTAL_AVG'] ?? null;
+
+                                    const getCecoMetric = (col: DisplayColumn): string => {
+                                        if (!cecoHcData) return '';
+                                        const hc = cecoHcData[col.sourceMonths[0]] ?? null;
+                                        if (metricMode === 'headcount') return fmtHc(hc);
+                                        const val = getCellValue(ceco.totals as ReportRow, col);
+                                        return fmtPw(perWorkerValue(val, hc));
+                                    };
+
+                                    const cecoTotalMetric = (): string => {
+                                        if (metricMode === 'headcount') return fmtHc(cecoHcAvg != null ? Math.round(cecoHcAvg) : null);
+                                        return fmtPw(perWorkerValue(ceco.totals['TOTAL'] ?? null, cecoHcAvg));
+                                    };
+
+                                    return (
+                                        <Fragment key={`${partida.name}|${ceco.code}`}>
+                                            <tr
+                                                className="rpt-row-l1"
+                                                onClick={isDual ? () => toggleCeco(partida.name, ceco.code) : undefined}
+                                                style={{ cursor: isDual ? 'pointer' : 'default' }}
+                                            >
+                                                <td className="rpt-sticky">
+                                                    {isDual && <span className="rpt-chevron">{cecoExpanded ? '\u25BE' : '\u25B8'}</span>}
+                                                    {ceco.code} {ceco.desc}
+                                                </td>
+                                                {isDual ? (
                                                     <>
+                                                        <NumCellsDual row={ceco.totals as ReportRow} columns={columns} activeHeaders={activeHeaders} getMetric={getCecoMetric} />
                                                         <TotalCell val={ceco.totals['TOTAL'] ?? null} />
-                                                        <td className="rpt-col-metric">
-                                                            {headcountMap![ceco.code]?.['TOTAL_AVG'] != null
-                                                                ? Math.round(headcountMap![ceco.code]['TOTAL_AVG'])
-                                                                : '\u2014'}
-                                                        </td>
+                                                        <td className="rpt-col-metric">{cecoTotalMetric()}</td>
                                                     </>
                                                 ) : (
                                                     <>
+                                                        <NumCells row={ceco.totals as ReportRow} columns={columns} activeHeaders={activeHeaders} />
                                                         <TotalCell val={ceco.totals['TOTAL'] ?? null} />
-                                                        {(() => {
-                                                            const pw = perWorkerValue(
-                                                                ceco.totals['TOTAL'] ?? null,
-                                                                headcountMap![ceco.code]?.['TOTAL_AVG'] ?? null,
-                                                            );
-                                                            return (
-                                                                <td className={`rpt-col-metric ${negClass(pw)}`}>
-                                                                    {pw !== null ? formatPerWorker(pw) : '\u2014'}
-                                                                </td>
-                                                            );
-                                                        })()}
                                                     </>
                                                 )}
-                                            </>
-                                        ) : (
-                                            <>
-                                                <NumCells row={ceco.totals as ReportRow} columns={columns} />
-                                                <TotalCell val={ceco.totals['TOTAL'] ?? null} />
-                                            </>
-                                        )}
-                                    </tr>
-                                ))}
+                                            </tr>
+
+                                            {/* L2: Cuentas (only in dual mode, inheriting CECO headcount) */}
+                                            {isDual && cecoExpanded && ceco.cuentas.map((cuenta, ci) => {
+                                                const getCuentaMetric = (col: DisplayColumn): string => {
+                                                    if (!cecoHcData) return '';
+                                                    const hc = cecoHcData[col.sourceMonths[0]] ?? null;
+                                                    if (metricMode === 'headcount') return fmtHc(hc);
+                                                    const val = getCellValue(cuenta.row, col);
+                                                    return fmtPw(perWorkerValue(val, hc));
+                                                };
+
+                                                const cuentaTotalMetric = (): string => {
+                                                    if (metricMode === 'headcount') return fmtHc(cecoHcAvg != null ? Math.round(cecoHcAvg) : null);
+                                                    return fmtPw(perWorkerValue(cuenta.row['TOTAL'] as number | null, cecoHcAvg));
+                                                };
+
+                                                return (
+                                                    <tr key={ci} className="rpt-row-l2">
+                                                        <td className="rpt-sticky">{cuenta.row['CUENTA_CONTABLE']} {cuenta.row['DESCRIPCION']}</td>
+                                                        <NumCellsDual row={cuenta.row as unknown as Record<string, number>} columns={columns} activeHeaders={activeHeaders} getMetric={getCuentaMetric} />
+                                                        <TotalCell val={cuenta.row['TOTAL'] as number | null} />
+                                                        <td className="rpt-col-metric">{cuentaTotalMetric()}</td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </Fragment>
+                                    );
+                                })}
                             </Fragment>
                         );
                     })}
 
                     {/* Grand total */}
                     <tr className="rpt-row-total">
-                        <td>{TOTAL_LABELS[planillaFilter]}</td>
+                        <td className="rpt-sticky">{TOTAL_LABELS[planillaFilter]}</td>
                         {isDual ? (
                             <>
-                                {metricMode === 'headcount' ? (() => {
-                                    const { cells: hcCells, totalHc } = grandTotalHeadcount({ partidas, headcountMap: headcountMap!, columns });
-                                    return (
-                                        <>
-                                            {hcCells.map((c, i) => {
-                                                const val = getCellValue(grandTotal as ReportRow, columns[i]);
-                                                return (
-                                                    <Fragment key={c.key}>
-                                                        <td className={negClass(val)}>{formatEmpty(val)}</td>
-                                                        <td className="rpt-col-metric" style={{ fontWeight: 700 }}>{c.hc ?? '\u2014'}</td>
-                                                    </Fragment>
-                                                );
-                                            })}
-                                            <TotalCell val={grandTotal['TOTAL'] ?? null} />
-                                            <td className="rpt-col-metric" style={{ fontWeight: 700 }}>{totalHc ?? '\u2014'}</td>
-                                        </>
-                                    );
-                                })() : (() => {
-                                    const { cells: pwCells, totalPw } = grandTotalPerWorker({ partidas, headcountMap: headcountMap!, columns });
-                                    return (
-                                        <>
-                                            {pwCells.map((c, i) => {
-                                                const val = getCellValue(grandTotal as ReportRow, columns[i]);
-                                                return (
-                                                    <Fragment key={c.key}>
-                                                        <td className={negClass(val)}>{formatEmpty(val)}</td>
-                                                        <td className={`rpt-col-metric ${negClass(c.pw)}`} style={{ fontWeight: 700 }}>
-                                                            {c.pw !== null ? formatPerWorker(c.pw) : '\u2014'}
-                                                        </td>
-                                                    </Fragment>
-                                                );
-                                            })}
-                                            <TotalCell val={grandTotal['TOTAL'] ?? null} />
-                                            <td className={`rpt-col-metric ${negClass(totalPw)}`} style={{ fontWeight: 700 }}>
-                                                {totalPw !== null ? formatPerWorker(totalPw) : '\u2014'}
-                                            </td>
-                                        </>
-                                    );
-                                })()}
+                                <NumCellsDual
+                                    row={grandTotal as ReportRow}
+                                    columns={columns}
+                                    activeHeaders={activeHeaders}
+                                    getMetric={(col) => {
+                                        if (!headcountMap) return '';
+                                        if (metricMode === 'headcount') return fmtHc(grandHcPerCol(partidas, headcountMap, col));
+                                        return fmtPw(grandPwPerCol(partidas, headcountMap, col));
+                                    }}
+                                />
+                                <TotalCell val={grandTotal['TOTAL'] ?? null} />
+                                <td className="rpt-col-metric" style={{ fontWeight: 700 }}>
+                                    {headcountMap && (metricMode === 'headcount'
+                                        ? fmtHc(grandHcAvg(partidas, headcountMap))
+                                        : fmtPw(grandPwAvg(partidas, headcountMap))
+                                    )}
+                                </td>
                             </>
                         ) : (
                             <>
-                                <NumCells row={grandTotal as ReportRow} columns={columns} />
+                                <NumCells row={grandTotal as ReportRow} columns={columns} activeHeaders={activeHeaders} />
                                 <TotalCell val={grandTotal['TOTAL'] ?? null} />
                             </>
                         )}
                     </tr>
                 </tbody>
             </table>
+            </div>
 
             {/* ═══ TABLE 2: % DE INGRESOS (L0 → L1 → L2) ═══ */}
             {revenueRow && (
@@ -779,6 +719,7 @@ export default function PlanillaTable({ rows, columns, revenueRow, headcountMap 
                         <div className="sep-line"></div>
                     </div>
 
+                    <div className="overflow-x-auto">
                     <table className="rpt-table">
                         <TableHead columns={columns} />
                         <tbody>
@@ -788,15 +729,14 @@ export default function PlanillaTable({ rows, columns, revenueRow, headcountMap 
                                 return (
                                     <Fragment key={partida.name}>
                                         <tr className="rpt-row-l0" onClick={() => togglePctPartida(partida.name)}>
-                                            <td>
+                                            <td className="rpt-sticky">
                                                 <span className="rpt-chevron">{isPctExpanded ? '\u25BE' : '\u25B8'}</span>
                                                 {partida.name}
                                             </td>
-                                            <NumCellsPct row={partida.totals as ReportRow} revenueRow={revenueRow} columns={columns} />
+                                            <NumCellsPct row={partida.totals as ReportRow} revenueRow={revenueRow} columns={columns} activeHeaders={activeHeaders} />
                                             <TotalCellPct costVal={partida.totals['TOTAL'] ?? null} revenueVal={revTotal} />
                                         </tr>
 
-                                        {/* L1: CECOs */}
                                         {isPctExpanded && partida.cecos.map((ceco) => {
                                             const cecoKey = `${partida.name}|${ceco.code}`;
                                             const isCecoExpanded = expandedPctCecos.has(cecoKey);
@@ -804,21 +744,20 @@ export default function PlanillaTable({ rows, columns, revenueRow, headcountMap 
                                             return (
                                                 <Fragment key={cecoKey}>
                                                     <tr className="rpt-row-l1" onClick={() => togglePctCeco(partida.name, ceco.code)}>
-                                                        <td>
+                                                        <td className="rpt-sticky">
                                                             <span className="rpt-chevron">{isCecoExpanded ? '\u25BE' : '\u25B8'}</span>
                                                             {ceco.code} {ceco.desc}
                                                         </td>
-                                                        <NumCellsPct row={ceco.totals as ReportRow} revenueRow={revenueRow} columns={columns} />
+                                                        <NumCellsPct row={ceco.totals as ReportRow} revenueRow={revenueRow} columns={columns} activeHeaders={activeHeaders} />
                                                         <TotalCellPct costVal={ceco.totals['TOTAL'] ?? null} revenueVal={revTotal} />
                                                     </tr>
 
-                                                    {/* L2: Cuentas */}
                                                     {isCecoExpanded && ceco.cuentas.map((cuenta, ci) => (
                                                         <tr key={ci} className="rpt-row-l2">
-                                                            <td>
+                                                            <td className="rpt-sticky">
                                                                 {cuenta.row['CUENTA_CONTABLE']} {cuenta.row['DESCRIPCION']}
                                                             </td>
-                                                            <NumCellsPct row={cuenta.row} revenueRow={revenueRow} columns={columns} />
+                                                            <NumCellsPct row={cuenta.row} revenueRow={revenueRow} columns={columns} activeHeaders={activeHeaders} />
                                                             <TotalCellPct costVal={cuenta.row['TOTAL'] as number | null} revenueVal={revTotal} />
                                                         </tr>
                                                     ))}
@@ -829,14 +768,14 @@ export default function PlanillaTable({ rows, columns, revenueRow, headcountMap 
                                 );
                             })}
 
-                            {/* Pct grand total */}
                             <tr className="rpt-row-total">
-                                <td>{TOTAL_LABELS[planillaFilter]}</td>
-                                <NumCellsPct row={grandTotal as ReportRow} revenueRow={revenueRow} columns={columns} />
+                                <td className="rpt-sticky">{TOTAL_LABELS[planillaFilter]}</td>
+                                <NumCellsPct row={grandTotal as ReportRow} revenueRow={revenueRow} columns={columns} activeHeaders={activeHeaders} />
                                 <TotalCellPct costVal={grandTotal['TOTAL'] ?? null} revenueVal={revTotal} />
                             </tr>
                         </tbody>
                     </table>
+                    </div>
                 </>
             )}
         </div>

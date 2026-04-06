@@ -19,7 +19,7 @@ export default function FinancialTable({ rows, columns, labelKey, showTotal = fa
             <table className="rpt-table">
                 <thead>
                     <tr>
-                        <th className="text-left">Partida</th>
+                        <th className="text-left rpt-sticky">Partida</th>
                         {columns.map(col => (
                             <th key={col.header}>{col.header}</th>
                         ))}
@@ -47,7 +47,7 @@ export default function FinancialTable({ rows, columns, labelKey, showTotal = fa
 
                         return (
                             <tr key={idx} className={rowClass}>
-                                <td>{label}</td>
+                                <td className="rpt-sticky">{label}</td>
                                 {columns.map(col => {
                                     const val = getCellValue(row, col);
                                     return (

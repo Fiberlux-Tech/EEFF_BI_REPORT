@@ -31,7 +31,7 @@ export default function DetailTable({ title, rows, labelKeys, headerLabels, colu
                 <table className="rpt-table">
                     <thead>
                         <tr>
-                            <th colSpan={labelKeys.length} className="text-left">
+                            <th colSpan={labelKeys.length} className="text-left rpt-sticky">
                                 {headerLabels.join(' / ')}
                             </th>
                             {columns.map(col => (
@@ -65,7 +65,7 @@ export default function DetailTable({ title, rows, labelKeys, headerLabels, colu
                                             filterVal: rowFilterVal,
                                             label: `${rowLabel} \u2014 Todo el periodo`,
                                         })}
-                                        className={`rpt-clickable ${isRowSelected ? 'rpt-selected' : ''}
+                                        className={`rpt-clickable rpt-sticky ${isRowSelected ? 'rpt-selected' : ''}
                                             ${isTotal ? '' : ''}`}
                                         style={isTotal ? { fontWeight: 700 } : {}}
                                     >
