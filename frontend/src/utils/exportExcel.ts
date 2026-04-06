@@ -24,7 +24,21 @@ export interface DetailSheetDef {
     year: number;
 }
 
-export type ExportSheet = SummarySheetDef | DetailSheetDef;
+export interface PlanillaExportRow {
+    label: string;
+    level: 0 | 1 | 2;             // 0=partida, 1=ceco, 2=cuenta
+    values: Record<string, number>; // month keys + TOTAL
+}
+
+export interface PlanillaSheetDef {
+    kind: 'planilla';
+    sheetName: string;
+    flatRows: PlanillaExportRow[];
+    columns: DisplayColumn[];
+    year: number;
+}
+
+export type ExportSheet = SummarySheetDef | DetailSheetDef | PlanillaSheetDef;
 
 export interface ExportOptions {
     sheets: ExportSheet[];
@@ -45,6 +59,14 @@ const BOLD_LABEL_STYLE: XLSX.CellStyle = {
     font: { bold: true, sz: 10 },
     fill: { fgColor: { rgb: 'F9FAFB' } },
 };
+
+// Planilla hierarchy styles
+const PL_L0_LABEL: XLSX.CellStyle = { font: { bold: true, sz: 10 }, fill: { fgColor: { rgb: 'F0F0EE' } } };
+const PL_L0_NUM: XLSX.CellStyle = { font: { bold: true, sz: 10 }, fill: { fgColor: { rgb: 'F0F0EE' } }, numFmt: NUM_FMT, alignment: { horizontal: 'right' } };
+const PL_L1_LABEL: XLSX.CellStyle = { font: { sz: 10 } };
+const PL_L1_NUM: XLSX.CellStyle = { font: { sz: 10 }, numFmt: NUM_FMT, alignment: { horizontal: 'right' } };
+const PL_L2_LABEL: XLSX.CellStyle = { font: { sz: 9, color: { rgb: '666666' } } };
+const PL_L2_NUM: XLSX.CellStyle = { font: { sz: 9, color: { rgb: '666666' } }, numFmt: NUM_FMT, alignment: { horizontal: 'right' } };
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -184,6 +206,58 @@ function buildDetailSheet(def: DetailSheetDef): XLSX.WorkSheet {
     return ws;
 }
 
+// ── Planilla sheet builder ───────────────────────────────────────────
+
+function buildPlanillaSheet(def: PlanillaSheetDef): XLSX.WorkSheet {
+    const { flatRows, columns, year } = def;
+    const dataCols = columns.length + 1; // +1 for year total
+    const totalCols = 1 + dataCols;      // label + data
+
+    const ws: XLSX.WorkSheet = {};
+    let r = 0;
+
+    // Header row
+    ws[cellRef(r, 0)] = { v: 'Concepto', t: 's', s: HEADER_LABEL_STYLE };
+    columns.forEach((col, ci) => {
+        ws[cellRef(r, 1 + ci)] = { v: col.header, t: 's', s: HEADER_STYLE };
+    });
+    ws[cellRef(r, 1 + columns.length)] = { v: String(year), t: 's', s: HEADER_STYLE };
+    r++;
+
+    for (const row of flatRows) {
+        const lblStyle = row.level === 0 ? PL_L0_LABEL : row.level === 1 ? PL_L1_LABEL : PL_L2_LABEL;
+        const numStyle = row.level === 0 ? PL_L0_NUM : row.level === 1 ? PL_L1_NUM : PL_L2_NUM;
+
+        const indent = row.level === 1 ? '    ' : row.level === 2 ? '        ' : '';
+        ws[cellRef(r, 0)] = { v: indent + row.label, t: 's', s: lblStyle };
+
+        columns.forEach((col, ci) => {
+            const val = getCellValue(row.values as unknown as ReportRow, col);
+            if (val !== null && val !== undefined) {
+                ws[cellRef(r, 1 + ci)] = { v: val, t: 'n', s: numStyle };
+            } else {
+                ws[cellRef(r, 1 + ci)] = { v: '', t: 's', s: numStyle };
+            }
+        });
+
+        // Total column
+        const total = row.values['TOTAL'] ?? null;
+        const totalStyle = row.level === 0 ? PL_L0_NUM : row.level === 1 ? PL_L1_NUM : PL_L2_NUM;
+        if (total !== null && total !== undefined) {
+            ws[cellRef(r, 1 + columns.length)] = { v: total, t: 'n', s: totalStyle };
+        } else {
+            ws[cellRef(r, 1 + columns.length)] = { v: '', t: 's', s: totalStyle };
+        }
+
+        r++;
+    }
+
+    ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: r - 1, c: totalCols - 1 } });
+    ws['!cols'] = [{ wch: 45 }, ...Array(dataCols).fill({ wch: 14 })];
+
+    return ws;
+}
+
 // ── Main export function ─────────────────────────────────────────────
 
 export function exportToExcel({ sheets, filename }: ExportOptions): void {
@@ -192,7 +266,9 @@ export function exportToExcel({ sheets, filename }: ExportOptions): void {
     for (const sheet of sheets) {
         const ws = sheet.kind === 'summary'
             ? buildSummarySheet(sheet)
-            : buildDetailSheet(sheet);
+            : sheet.kind === 'planilla'
+                ? buildPlanillaSheet(sheet)
+                : buildDetailSheet(sheet);
 
         XLSX.utils.book_append_sheet(wb, ws, safeSheetName(sheet.sheetName));
     }

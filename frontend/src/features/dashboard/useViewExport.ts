@@ -1,9 +1,86 @@
 import { useCallback } from 'react';
 import { useReport } from '@/contexts/ReportContext';
 import { VIEW_TITLE_MAP, VIEW_TABLE_CONFIGS, ALL_MONTHS, isAllZeroTable, type NoteView } from '@/config/viewConfigs';
-import { exportToExcel, type ExportSheet, type SummarySheetDef, type DetailSheetDef } from '@/utils/exportExcel';
-
+import { exportToExcel, type ExportSheet, type SummarySheetDef, type DetailSheetDef, type PlanillaSheetDef, type PlanillaExportRow } from '@/utils/exportExcel';
+import type { ReportRow, DisplayColumn } from '@/types';
 import { getDataKeyForTable } from '@/utils/dataKeyMapping';
+
+// ── Planilla grouping (mirrors PlanillaTable hierarchy) ─────────────
+
+const PARTIDA_PL_ORDER = [
+    'INGRESOS ORDINARIOS', 'INGRESOS PROYECTOS',
+    'COSTO', 'D&A - COSTO',
+    'GASTO VENTA', 'GASTO ADMIN',
+    'PARTICIPACION DE TRABAJADORES', 'D&A - GASTO',
+    'PROVISION INCOBRABLE', 'OTROS INGRESOS', 'OTROS EGRESOS',
+    'RESULTADO FINANCIERO', 'DIFERENCIA DE CAMBIO',
+    'IMPUESTO A LA RENTA', 'POR CLASIFICAR',
+];
+const PARTIDA_ORDER_INDEX = new Map(PARTIDA_PL_ORDER.map((p, i) => [p, i]));
+
+function buildPlanillaExportRows(rows: ReportRow[], columns: DisplayColumn[]): PlanillaExportRow[] {
+    const monthKeys = new Set<string>();
+    for (const col of columns) {
+        for (const m of col.sourceMonths) monthKeys.add(m);
+    }
+
+    const sumMonths = (rws: ReportRow[]): Record<string, number> => {
+        const sums: Record<string, number> = {};
+        for (const row of rws) {
+            for (const m of monthKeys) sums[m] = (sums[m] ?? 0) + ((row[m] as number) ?? 0);
+            sums['TOTAL'] = (sums['TOTAL'] ?? 0) + ((row['TOTAL'] as number) ?? 0);
+        }
+        return sums;
+    };
+
+    // Group: partida → ceco → cuentas
+    const partidaMap = new Map<string, Map<string, { desc: string; rows: ReportRow[] }>>();
+    for (const row of rows) {
+        const partida = String(row['PARTIDA_PL'] ?? '');
+        const ceco = String(row['CENTRO_COSTO'] ?? '');
+        const cecoDesc = String(row['DESC_CECO'] ?? '');
+        if (!partida) continue;
+        if (!partidaMap.has(partida)) partidaMap.set(partida, new Map());
+        const cecoMap = partidaMap.get(partida)!;
+        if (!cecoMap.has(ceco)) cecoMap.set(ceco, { desc: cecoDesc, rows: [] });
+        cecoMap.get(ceco)!.rows.push(row);
+    }
+
+    // Build sorted partidas
+    const sortedPartidas = [...partidaMap.entries()].sort((a, b) => {
+        const fallback = PARTIDA_PL_ORDER.length;
+        return (PARTIDA_ORDER_INDEX.get(a[0]) ?? fallback) - (PARTIDA_ORDER_INDEX.get(b[0]) ?? fallback);
+    });
+
+    // Flatten into export rows
+    const flat: PlanillaExportRow[] = [];
+    for (const [partidaName, cecoMap] of sortedPartidas) {
+        const allPartidaRows: ReportRow[] = [];
+        const cecoEntries = [...cecoMap.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+
+        for (const [, { rows: cecoRows }] of cecoEntries) {
+            allPartidaRows.push(...cecoRows);
+        }
+
+        // L0: Partida subtotal
+        flat.push({ label: partidaName, level: 0, values: sumMonths(allPartidaRows) });
+
+        // L1: CECO subtotals + L2: Cuenta details
+        for (const [cecoCode, { desc, rows: cecoRows }] of cecoEntries) {
+            flat.push({ label: `${cecoCode} ${desc}`, level: 1, values: sumMonths(cecoRows) });
+            for (const row of cecoRows) {
+                const cuenta = String(row['CUENTA_CONTABLE'] ?? '');
+                const descripcion = String(row['DESCRIPCION'] ?? '');
+                const vals: Record<string, number> = {};
+                for (const m of monthKeys) vals[m] = (row[m] as number) ?? 0;
+                vals['TOTAL'] = (row['TOTAL'] as number) ?? 0;
+                flat.push({ label: `${cuenta} ${descripcion}`, level: 2, values: vals });
+            }
+        }
+    }
+
+    return flat;
+}
 
 export function useViewExport(): { handleExport: () => void; canExport: boolean } {
     const {
@@ -47,13 +124,13 @@ export function useViewExport(): { handleExport: () => void; canExport: boolean 
         } else if (currentView === 'analysis_planilla') {
             const planillaKeys = ['PARTIDA_PL', 'CENTRO_COSTO', 'DESC_CECO', 'CUENTA_CONTABLE', 'DESCRIPCION'];
             const planillaRows = getMergedDetailRows('planilla_by_cuenta', planillaKeys);
-            const sheet: DetailSheetDef = {
-                kind: 'detail',
+            const cols = getDisplayColumns('pl');
+            const flatRows = buildPlanillaExportRows(planillaRows, cols);
+            const sheet: PlanillaSheetDef = {
+                kind: 'planilla',
                 sheetName: viewTitle,
-                rows: planillaRows,
-                columns: getDisplayColumns('pl'),
-                headerLabels: ['Partida', 'Centro Costo', 'Desc. CECO', 'Cuenta', 'Descripción'],
-                labelKeys: planillaKeys,
+                flatRows,
+                columns: cols,
                 year: selectedYear,
             };
             sheets.push(sheet);
