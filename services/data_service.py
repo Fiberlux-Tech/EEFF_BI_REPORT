@@ -254,10 +254,11 @@ def _run_pl_transforms(raw_current_full: pd.DataFrame) -> tuple[pd.DataFrame, pd
     dya_gasto = detail_by_ceco(df_stmt, ["D&A - GASTO"], with_total_row=True, preagg=preagg)
     dya_gasto_by_cuenta = detail_by_cuenta(df_stmt, ["D&A - GASTO"], preagg=preagg)
     res_fin = detail_resultado_financiero(df_stmt, preagg=preagg)
+    otros_ingresos = detail_by_cuenta(df_stmt, ["OTROS INGRESOS"], with_total_row=True, preagg=preagg)
     otros_ingresos_by_cuenta = detail_by_cuenta(df_stmt, ["OTROS INGRESOS"], preagg=preagg)
     participacion_by_cuenta = detail_by_cuenta(df_stmt, ["PARTICIPACION DE TRABAJADORES"], preagg=preagg)
     provision_by_cuenta = detail_by_cuenta(df_stmt, ["PROVISION INCOBRABLE"], preagg=preagg)
-    otros_egresos = detail_by_ceco(df_stmt, ["OTROS EGRESOS"], with_total_row=True, preagg=preagg)
+    otros_egresos = detail_by_cuenta(df_stmt, ["OTROS EGRESOS"], with_total_row=True, preagg=preagg)
     otros_egresos_by_cuenta = detail_by_cuenta(df_stmt, ["OTROS EGRESOS"], preagg=preagg)
     planilla_by_cuenta = detail_planilla(df_stmt, preagg=preagg)
     proveedores_transporte = detail_proveedores_transporte(df_stmt)
@@ -279,6 +280,7 @@ def _run_pl_transforms(raw_current_full: pd.DataFrame) -> tuple[pd.DataFrame, pd
         "dya_gasto_by_cuenta": _df_to_records(dya_gasto_by_cuenta),
         "resultado_financiero_ingresos": _df_to_records(res_fin.ingresos),
         "resultado_financiero_gastos": _df_to_records(res_fin.gastos),
+        "otros_ingresos": _df_to_records(otros_ingresos),
         "otros_ingresos_by_cuenta": _df_to_records(otros_ingresos_by_cuenta),
         "participacion_by_cuenta": _df_to_records(participacion_by_cuenta),
         "provision_by_cuenta": _df_to_records(provision_by_cuenta),

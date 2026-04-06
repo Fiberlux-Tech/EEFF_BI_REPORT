@@ -51,6 +51,7 @@ export interface ReportData {
   dya_costo_by_cuenta: ReportRow[];
   dya_gasto: ReportRow[];
   dya_gasto_by_cuenta: ReportRow[];
+  otros_ingresos: ReportRow[];
   otros_egresos: ReportRow[];
   otros_egresos_by_cuenta: ReportRow[];
   resultado_financiero_ingresos: ReportRow[];

@@ -13,6 +13,7 @@ interface PLNoteViewProps {
     tables: TableConfig[];
     columns: DisplayColumn[];
     year: number;
+    showTitles?: boolean;
 }
 
 interface DetailState {
@@ -64,7 +65,7 @@ function detailReducer(state: DetailState, action: DetailAction): DetailState {
 }
 
 
-export default function PLNoteView({ tables, columns, year }: PLNoteViewProps) {
+export default function PLNoteView({ tables, columns, year, showTitles }: PLNoteViewProps) {
     const { selectedCompany, selectedYear, periodRange, trailingMonthSources } = useReport();
     const [state, dispatch] = useReducer(detailReducer, detailInitialState);
 
@@ -214,7 +215,7 @@ export default function PLNoteView({ tables, columns, year }: PLNoteViewProps) {
                     year={year}
                     selection={state.selection}
                     onCellClick={handleCellClick}
-                    showTitle={tables.length > 1}
+                    showTitle={showTitles ?? tables.length > 1}
                 />
             ))}
 

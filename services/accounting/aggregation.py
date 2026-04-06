@@ -93,9 +93,11 @@ def detail_ceco_by_cuenta(df: pd.DataFrame, partidas: list[str],
 
 
 def detail_by_cuenta(df: pd.DataFrame, partidas: list[str],
+                     with_total_row: bool = False,
                      preagg: pd.DataFrame | None = None) -> pd.DataFrame:
     """Filter to *partidas* and pivot by CUENTA_CONTABLE + DESCRIPCION."""
-    return _detail_pivot(df, partidas, [CUENTA_CONTABLE, DESCRIPCION], preagg=preagg)
+    return _detail_pivot(df, partidas, [CUENTA_CONTABLE, DESCRIPCION],
+                         with_total_row=with_total_row, preagg=preagg)
 
 
 def detail_planilla(df: pd.DataFrame,

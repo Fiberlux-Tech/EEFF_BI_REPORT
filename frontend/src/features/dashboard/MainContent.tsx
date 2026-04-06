@@ -116,6 +116,9 @@ export default function MainContent() {
                 });
             }
 
+            // Remember if the config defines multiple sections (for header display)
+            const isMultiSection = tables.length > 1;
+
             // Filter out all-zero tables
             tables = tables.filter(t => !isAllZeroTable(t.rows, ALL_MONTHS));
 
@@ -127,7 +130,7 @@ export default function MainContent() {
                 );
             }
 
-            return <PLNoteView tables={tables} columns={columns} year={reportData.year} />;
+            return <PLNoteView tables={tables} columns={columns} year={reportData.year} showTitles={isMultiSection} />;
         }
 
         if (currentView === 'analysis_pl_finanzas') {

@@ -45,9 +45,10 @@ export const VIEW_TABLE_CONFIGS: Record<NoteView, NoteViewConfig> = {
     },
     otros_egresos: {
         tables: (d) => [
-            { title: 'Otros Egresos', rows: d.otros_egresos, labelKeys: ['CENTRO_COSTO', 'DESC_CECO'], headerLabels: ['CC', 'Centro de Costo'], partida: 'OTROS EGRESOS', filterCol: 'CENTRO_COSTO' },
+            { title: 'Otros Ingresos', rows: d.otros_ingresos, labelKeys: ['CUENTA_CONTABLE', 'DESCRIPCION'], headerLabels: ['Cuenta', 'Descripcion'], partida: 'OTROS INGRESOS', filterCol: 'CUENTA_CONTABLE' },
+            { title: 'Otros Egresos', rows: d.otros_egresos, labelKeys: ['CUENTA_CONTABLE', 'DESCRIPCION'], headerLabels: ['Cuenta', 'Descripcion'], partida: 'OTROS EGRESOS', filterCol: 'CUENTA_CONTABLE' },
         ],
-        labelKeys: ['CENTRO_COSTO', 'DESC_CECO'],
+        labelKeys: ['CUENTA_CONTABLE', 'DESCRIPCION'],
     },
     dya: {
         tables: (d) => [
