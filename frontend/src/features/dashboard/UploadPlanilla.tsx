@@ -30,7 +30,7 @@ export default function UploadPlanilla() {
                 formData,
             );
             setStatus('success');
-            setMessage(`${result.saved} registros de headcount guardados`);
+            setMessage(`${result.saved} registros de empleados guardados`);
         } catch (err) {
             setStatus('error');
             setMessage(err instanceof Error ? err.message : 'Error al cargar archivo');

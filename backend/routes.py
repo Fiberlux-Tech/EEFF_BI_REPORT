@@ -29,8 +29,7 @@ from data_service import (
 )
 from pipeline import run_report
 from headcount_service import (
-    load_headcount, save_headcount, save_headcount_csv,
-    delete_headcount_entry,
+    load_headcount, save_headcount_csv, get_roster_detail,
 )
 
 api_bp = Blueprint('api', __name__)
@@ -326,37 +325,6 @@ def get_headcount():
     return ok({'headcount': data})
 
 
-@api_bp.route('/admin/headcount', methods=['POST'])
-@login_required
-def upsert_headcount():
-    """Upsert headcount records from JSON.
-
-    Body: { "company": "FIBERLINE",
-            "records": [{"centro_costo": "100.101.00", "year_month": 202501, "headcount": 22}] }
-    """
-    body = request.get_json(silent=True) or {}
-    company = (body.get('company') or '').strip().upper()
-    if company not in VALID_COMPANIES:
-        raise RequestValidationError(f'Empresa invalida: {company}')
-
-    records = body.get('records')
-    if not isinstance(records, list) or not records:
-        raise RequestValidationError('records es requerido y debe ser una lista no vacia')
-
-    for r in records:
-        ym = r.get('year_month')
-        hc = r.get('headcount')
-        if not isinstance(ym, int) or ym % 100 < 1 or ym % 100 > 12:
-            raise RequestValidationError(f'year_month invalido: {ym}')
-        if not isinstance(hc, (int, float)) or hc <= 0:
-            raise RequestValidationError(f'headcount debe ser positivo: {hc}')
-        if not r.get('centro_costo', '').strip():
-            raise RequestValidationError('centro_costo es requerido')
-
-    count = save_headcount(_hc_db_path(), company, records)
-    return ok({'saved': count})
-
-
 @api_bp.route('/admin/headcount/upload', methods=['POST'])
 @login_required
 def upload_headcount_csv():
@@ -385,25 +353,25 @@ def upload_headcount_csv():
     return ok({'saved': count})
 
 
-@api_bp.route('/admin/headcount', methods=['DELETE'])
+@api_bp.route('/headcount/roster', methods=['GET'])
 @login_required
-def remove_headcount():
-    """Delete a single headcount entry.
+def get_roster():
+    """Return individual employees for a company/CECO/month.
 
-    Body: { "company": "FIBERLINE", "centro_costo": "100.101.00", "year_month": 202501 }
+    Query params: company, centro_costo, year_month
     """
-    body = request.get_json(silent=True) or {}
-    company = (body.get('company') or '').strip().upper()
+    company = (request.args.get('company') or '').strip().upper()
     if company not in VALID_COMPANIES:
         raise RequestValidationError(f'Empresa invalida: {company}')
 
-    centro_costo = (body.get('centro_costo') or '').strip()
-    year_month = body.get('year_month')
-
+    centro_costo = (request.args.get('centro_costo') or '').strip()
     if not centro_costo:
         raise RequestValidationError('centro_costo es requerido')
-    if not isinstance(year_month, int):
-        raise RequestValidationError('year_month es requerido')
 
-    deleted = delete_headcount_entry(_hc_db_path(), company, centro_costo, year_month)
-    return ok({'deleted': deleted})
+    try:
+        year_month = int(request.args.get('year_month', ''))
+    except (ValueError, TypeError):
+        raise RequestValidationError('year_month es requerido (entero YYYYMM)')
+
+    employees = get_roster_detail(_hc_db_path(), company, centro_costo, year_month)
+    return ok({'employees': employees})

@@ -1,4 +1,8 @@
-"""SQLite-backed storage for headcount-per-CECO data."""
+"""SQLite-backed storage for employee roster data.
+
+Headcount is computed on-the-fly via COUNT(DISTINCT empleado) — no
+pre-aggregated table needed.
+"""
 
 import logging
 import os
@@ -8,23 +12,26 @@ logger = logging.getLogger("flxcontabilidad.headcount_db")
 
 _DEFAULT_DB = os.path.join(os.path.dirname(__file__), "headcount.db")
 
-_CREATE_TABLE = """\
-CREATE TABLE IF NOT EXISTS headcount (
+_CREATE_ROSTER = """\
+CREATE TABLE IF NOT EXISTS employee_roster (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     cia          TEXT    NOT NULL,
     centro_costo TEXT    NOT NULL,
     year_month   INTEGER NOT NULL,
-    headcount    INTEGER NOT NULL,
-    updated_at   TEXT    DEFAULT (datetime('now')),
-    UNIQUE(cia, centro_costo, year_month),
-    CHECK(headcount > 0),
-    CHECK(year_month >= 202001 AND year_month <= 209912)
+    empleado     TEXT    NOT NULL,
+    nombre       TEXT    NOT NULL DEFAULT '',
+    UNIQUE(cia, centro_costo, year_month, empleado)
 );
 """
 
 _CREATE_INDEX = """\
-CREATE INDEX IF NOT EXISTS idx_headcount_cia_ym
-    ON headcount(cia, year_month);
+CREATE INDEX IF NOT EXISTS idx_roster_cia_ym
+    ON employee_roster(cia, year_month);
+"""
+
+_CREATE_INDEX_DETAIL = """\
+CREATE INDEX IF NOT EXISTS idx_roster_cia_ceco_ym
+    ON employee_roster(cia, centro_costo, year_month);
 """
 
 
@@ -36,26 +43,31 @@ def _connect(db_path: str) -> sqlite3.Connection:
 
 
 def init_headcount_db(db_path: str | None = None) -> str:
-    """Create the headcount table + index if they don't exist.
+    """Create the roster table + indexes if they don't exist.
 
     Returns the resolved db_path so callers can store it.
     """
     db_path = db_path or _DEFAULT_DB
     with _connect(db_path) as conn:
-        conn.execute(_CREATE_TABLE)
+        conn.execute(_CREATE_ROSTER)
         conn.execute(_CREATE_INDEX)
+        conn.execute(_CREATE_INDEX_DETAIL)
     logger.info("Headcount DB initialised at %s", db_path)
     return db_path
 
 
+# ── Headcount queries (aggregated from roster) ─────────────────────────
+
 def fetch_headcount(db_path: str, cia: str, year: int) -> list[dict]:
-    """Return all headcount rows for a company/year."""
+    """Return headcount per CECO/month for a company/year."""
     lo = year * 100 + 1
     hi = year * 100 + 12
     with _connect(db_path) as conn:
         rows = conn.execute(
-            "SELECT centro_costo, year_month, headcount "
-            "FROM headcount WHERE cia = ? AND year_month BETWEEN ? AND ? "
+            "SELECT centro_costo, year_month, COUNT(DISTINCT empleado) AS headcount "
+            "FROM employee_roster "
+            "WHERE cia = ? AND year_month BETWEEN ? AND ? "
+            "GROUP BY centro_costo, year_month "
             "ORDER BY centro_costo, year_month",
             (cia, lo, hi),
         ).fetchall()
@@ -63,43 +75,63 @@ def fetch_headcount(db_path: str, cia: str, year: int) -> list[dict]:
 
 
 def fetch_headcount_all(db_path: str, cia: str) -> list[dict]:
-    """Return all headcount rows for a company (all years)."""
+    """Return headcount per CECO/month for a company (all years)."""
     with _connect(db_path) as conn:
         rows = conn.execute(
-            "SELECT centro_costo, year_month, headcount "
-            "FROM headcount WHERE cia = ? ORDER BY year_month, centro_costo",
+            "SELECT centro_costo, year_month, COUNT(DISTINCT empleado) AS headcount "
+            "FROM employee_roster "
+            "WHERE cia = ? "
+            "GROUP BY centro_costo, year_month "
+            "ORDER BY year_month, centro_costo",
             (cia,),
         ).fetchall()
     return [dict(r) for r in rows]
 
 
-def bulk_upsert(db_path: str, records: list[dict]) -> int:
-    """Insert or replace headcount records.  Skips rows with headcount <= 0.
+# ── Roster CRUD ─────────────────────────────────────────────────────────
 
-    Each dict must have keys: cia, centro_costo, year_month, headcount.
-    Returns the number of rows actually written.
+def bulk_upsert_roster(db_path: str, records: list[dict]) -> int:
+    """Insert or ignore raw employee roster rows.
+
+    Each dict must have keys: cia, centro_costo, year_month, empleado, nombre.
+    Returns the number of rows written.
     """
-    valid = [
-        r for r in records
-        if isinstance(r.get("headcount"), (int, float)) and r["headcount"] > 0
-    ]
-    if not valid:
+    if not records:
         return 0
     with _connect(db_path) as conn:
         conn.executemany(
-            "INSERT OR REPLACE INTO headcount (cia, centro_costo, year_month, headcount, updated_at) "
-            "VALUES (?, ?, ?, ?, datetime('now'))",
-            [(r["cia"], r["centro_costo"], r["year_month"], int(r["headcount"])) for r in valid],
+            "INSERT OR IGNORE INTO employee_roster "
+            "(cia, centro_costo, year_month, empleado, nombre) "
+            "VALUES (?, ?, ?, ?, ?)",
+            [(r["cia"], r["centro_costo"], r["year_month"],
+              r["empleado"], r.get("nombre", ""))
+             for r in records],
         )
-    logger.info("Upserted %d headcount records", len(valid))
-    return len(valid)
+    logger.info("Upserted %d roster records", len(records))
+    return len(records)
 
 
-def delete_headcount(db_path: str, cia: str, centro_costo: str, year_month: int) -> bool:
-    """Delete a single headcount entry. Returns True if a row was deleted."""
+def fetch_roster_detail(
+    db_path: str, cia: str, centro_costo: str, year_month: int,
+) -> list[dict]:
+    """Return individual employees for a specific company/CECO/month."""
     with _connect(db_path) as conn:
-        cur = conn.execute(
-            "DELETE FROM headcount WHERE cia = ? AND centro_costo = ? AND year_month = ?",
+        rows = conn.execute(
+            "SELECT empleado, nombre FROM employee_roster "
+            "WHERE cia = ? AND centro_costo = ? AND year_month = ? "
+            "ORDER BY nombre, empleado",
             (cia, centro_costo, year_month),
-        )
-    return cur.rowcount > 0
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def clear_roster(db_path: str) -> None:
+    """Delete all rows from employee_roster table."""
+    with _connect(db_path) as conn:
+        conn.execute("DELETE FROM employee_roster")
+
+
+def roster_count(db_path: str) -> int:
+    """Return total number of raw roster rows."""
+    with _connect(db_path) as conn:
+        return conn.execute("SELECT COUNT(*) FROM employee_roster").fetchone()[0]
