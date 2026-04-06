@@ -5,6 +5,9 @@ __pycache__/
 .env.*
 !.env.example
 *.db
+*.db-shm
+*.db-wal
+.claude/
 backend/logs/
 output/
 frontend/node_modules/
