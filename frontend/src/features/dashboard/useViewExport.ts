@@ -2,11 +2,12 @@ import { useCallback } from 'react';
 import { useReport } from '@/contexts/ReportContext';
 import { VIEW_TITLE_MAP, VIEW_TABLE_CONFIGS, ALL_MONTHS, isAllZeroTable, type NoteView } from '@/config/viewConfigs';
 import { exportToExcel, type ExportSheet, type SummarySheetDef, type DetailSheetDef, type PlanillaExportRow } from '@/utils/exportExcel';
-import type { ReportRow, DisplayColumn, Month, MonthSource } from '@/types';
+import type { ReportData, ReportRow, DisplayColumn, Month, MonthSource } from '@/types';
 import type { HeadcountMap } from '@/features/dashboard/useHeadcount';
 import { useHeadcount } from '@/features/dashboard/useHeadcount';
-import { getCellValue } from '@/utils/cellValue';
+import { getCellValue, getSummaryTotal } from '@/utils/cellValue';
 import { getDataKeyForTable } from '@/utils/dataKeyMapping';
+import { buildCecoGroups, buildCuentaEntries } from '@/utils/cecoGrouping';
 
 // ── Planilla grouping (mirrors PlanillaTable hierarchy) ─────────────
 
@@ -123,6 +124,86 @@ function hcAvg(cecoData: Record<string, number> | undefined, colYm: Map<DisplayC
         if (hc != null && hc > 0) { sum += hc; count++; }
     }
     return count > 0 ? sum / count : null;
+}
+
+// ── Finanzas (ExpandableFinancialTable) export ──────────────────────
+
+/** Map each expandable PARTIDA_PL to its _by_cuenta data key */
+const PARTIDA_TO_DATA_KEY: Record<string, keyof ReportData> = {
+    'COSTO': 'costo_by_cuenta',
+    'GASTO VENTA': 'gasto_venta_by_cuenta',
+    'GASTO ADMIN': 'gasto_admin_by_cuenta',
+    'D&A - COSTO': 'dya_costo_by_cuenta',
+    'D&A - GASTO': 'dya_gasto_by_cuenta',
+    'OTROS INGRESOS': 'otros_ingresos_by_cuenta',
+    'OTROS EGRESOS': 'otros_egresos_by_cuenta',
+    'PARTICIPACION DE TRABAJADORES': 'participacion_by_cuenta',
+    'PROVISION INCOBRABLE': 'provision_by_cuenta',
+};
+
+function buildFinanzasRows(
+    summaryRows: ReportRow[],
+    columns: DisplayColumn[],
+    getMergedDetailRows: (key: keyof ReportData, labelKeys: string[]) => ReportRow[],
+): PlanillaExportRow[] {
+    const cecoKeys = ['CENTRO_COSTO', 'DESC_CECO', 'CUENTA_CONTABLE', 'DESCRIPCION'];
+    const flat: PlanillaExportRow[] = [];
+
+    for (const row of summaryRows) {
+        const label = row['PARTIDA_PL'] as string;
+        if (!label || label.trim() === '') continue;
+
+        // Level 0: summary partida row — use getSummaryTotal for TOTAL
+        const vals: Record<string, number> = {};
+        for (const col of columns) {
+            const v = getCellValue(row, col);
+            if (v !== null) vals[col.sourceMonths[0]] = v;
+        }
+        const total = getSummaryTotal(row, columns, 'pl');
+        if (total !== null) vals['TOTAL'] = total;
+        flat.push({ label, level: 0, values: vals });
+
+        // If this partida has detail data, expand it
+        const dataKey = PARTIDA_TO_DATA_KEY[label];
+        if (!dataKey) continue;
+
+        const detailRows = getMergedDetailRows(dataKey, cecoKeys);
+        const cecoGroups = buildCecoGroups(detailRows, columns);
+
+        for (const group of cecoGroups) {
+            // Level 1: CECO group
+            const gVals: Record<string, number> = {};
+            for (const col of columns) {
+                const v = getCellValue(group.data, col);
+                if (v !== null) gVals[col.sourceMonths[0]] = v;
+            }
+            gVals['TOTAL'] = (group.data['TOTAL'] as number) ?? 0;
+            flat.push({ label: group.label, level: 1, values: gVals });
+
+            // Level 2: cuenta entries (grouped by prefix category)
+            const entries = buildCuentaEntries(group.cuentaRows, columns);
+            for (const entry of entries) {
+                const eVals: Record<string, number> = {};
+                let src: ReportRow;
+                let eLabel: string;
+                if (entry.prefix !== null) {
+                    src = entry.data;
+                    eLabel = entry.label;
+                } else {
+                    src = entry.row;
+                    eLabel = `${src['CUENTA_CONTABLE']} ${src['DESCRIPCION']}`;
+                }
+                for (const col of columns) {
+                    const v = getCellValue(src, col);
+                    if (v !== null) eVals[col.sourceMonths[0]] = v;
+                }
+                eVals['TOTAL'] = (src['TOTAL'] as number) ?? 0;
+                flat.push({ label: eLabel, level: 2, values: eVals });
+            }
+        }
+    }
+
+    return flat;
 }
 
 // ── Sheet builders ──────────────────────────────────────────────────
@@ -378,6 +459,30 @@ export function useViewExport(): { handleExport: () => void; canExport: boolean 
                     year: selectedYear,
                 });
             }
+        } else if (currentView === 'analysis_pl_finanzas') {
+            const rows = getMergedRows('pl_summary', 'PARTIDA_PL', 'pl');
+            const cols = getDisplayColumns('pl');
+            sheets.push({
+                kind: 'planilla',
+                sheetName: viewTitle,
+                flatRows: buildFinanzasRows(rows, cols, getMergedDetailRows),
+                columns: cols,
+                year: selectedYear,
+            });
+        } else if (currentView === 'analysis_proveedores') {
+            const proveedoresKeys = ['NIT', 'RAZON_SOCIAL'];
+            const proveedoresRows = getMergedDetailRows('proveedores_transporte', proveedoresKeys);
+            const cols = getDisplayColumns('pl');
+            const sheet: DetailSheetDef = {
+                kind: 'detail',
+                sheetName: viewTitle,
+                rows: proveedoresRows,
+                columns: cols,
+                headerLabels: ['NIT', 'Proveedor'],
+                labelKeys: proveedoresKeys,
+                year: selectedYear,
+            };
+            sheets.push(sheet);
         } else {
             // Note views
             const noteConfig = VIEW_TABLE_CONFIGS[currentView as NoteView];

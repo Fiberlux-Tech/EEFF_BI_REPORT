@@ -1,19 +1,20 @@
 import { useState, useMemo } from 'react';
 import type { ReportRow, DisplayColumn } from '@/types';
 import { formatNumber } from '@/utils/format';
-import { getCellValue, getSummaryTotal, BOLD_ROWS_PL } from '@/utils/cellValue';
+import { getCellValue } from '@/utils/cellValue';
 import { negClass } from '@/utils/classHelpers';
 import { FILTER_OPTIONS } from '@/config/cecoGroups';
 import type { CuentaEntry } from '@/config/cecoGroups';
 import { buildCuentaEntries, sumRows, buildCecoGroups } from '@/utils/cecoGrouping';
 import type { CecoGroup } from '@/utils/cecoGrouping';
 
-// ── Which PARTIDA_PL rows are expandable ─────────────────────────────
+// ── Partida order for the cost/expense analysis table ────────────────
 
-const EXPANDABLE = new Set([
-    'COSTO', 'GASTO VENTA', 'GASTO ADMIN', 'D&A - COSTO', 'D&A - GASTO',
-    'OTROS INGRESOS', 'OTROS EGRESOS', 'PARTICIPACION DE TRABAJADORES', 'PROVISION INCOBRABLE',
-]);
+const PARTIDA_ORDER = [
+    'COSTO', 'D&A - COSTO', 'GASTO VENTA', 'GASTO ADMIN',
+    'PARTICIPACION DE TRABAJADORES', 'D&A - GASTO',
+    'PROVISION INCOBRABLE', 'OTROS INGRESOS', 'OTROS EGRESOS',
+] as const;
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -32,8 +33,8 @@ function NumCells({ row, columns }: { row: ReportRow; columns: DisplayColumn[] }
     );
 }
 
-function TotalCell({ row, columns, variant }: { row: ReportRow; columns: DisplayColumn[]; variant?: 'pl' }) {
-    const total = variant === 'pl' ? getSummaryTotal(row, columns, 'pl') : (row['TOTAL'] as number | null ?? null);
+function TotalCell({ row }: { row: ReportRow; columns: DisplayColumn[] }) {
+    const total = row['TOTAL'] as number | null ?? null;
     return (
         <td className={negClass(total)} style={{ fontWeight: 600 }}>
             {formatNumber(total)}
@@ -44,7 +45,6 @@ function TotalCell({ row, columns, variant }: { row: ReportRow; columns: Display
 // ── Component ────────────────────────────────────────────────────────
 
 interface ExpandableFinancialTableProps {
-    rows: ReportRow[];
     columns: DisplayColumn[];
     costoByCuenta: ReportRow[];
     gastoVentaByCuenta: ReportRow[];
@@ -58,7 +58,7 @@ interface ExpandableFinancialTableProps {
 }
 
 export default function ExpandableFinancialTable(props: ExpandableFinancialTableProps) {
-    const { rows, columns, costoByCuenta, gastoVentaByCuenta, gastoAdminByCuenta, dyaCostoByCuenta, dyaGastoByCuenta, otrosIngresosByCuenta, otrosEgresosByCuenta, participacionByCuenta, provisionByCuenta } = props;
+    const { columns, costoByCuenta, gastoVentaByCuenta, gastoAdminByCuenta, dyaCostoByCuenta, dyaGastoByCuenta, otrosIngresosByCuenta, otrosEgresosByCuenta, participacionByCuenta, provisionByCuenta } = props;
 
     const [expandedPartidas, setExpandedPartidas] = useState<Set<string>>(new Set());
     const [expandedCecoGroups, setExpandedCecoGroups] = useState<Set<string>>(new Set());
@@ -114,9 +114,9 @@ export default function ExpandableFinancialTable(props: ExpandableFinancialTable
         const map = new Map<string, {
             cecoGroups: CecoGroup[];
             cuentaEntriesByCeco: Map<string, CuentaEntry[]>;
-            filteredTotal: ReportRow;
+            totalRow: ReportRow;
         }>();
-        for (const partida of EXPANDABLE) {
+        for (const partida of PARTIDA_ORDER) {
             const raw = allByCuentaMap[partida] ?? [];
             const filtered = filterCuenta(raw);
             const groups = buildCecoGroups(filtered, columns);
@@ -124,20 +124,11 @@ export default function ExpandableFinancialTable(props: ExpandableFinancialTable
             for (const g of groups) {
                 cuentaEntriesByCeco.set(g.label, buildCuentaEntries(g.cuentaRows, columns));
             }
-            const filteredTotal = { PARTIDA_PL: partida, ...sumRows(filtered, columns) } as ReportRow;
-            map.set(partida, { cecoGroups: groups, cuentaEntriesByCeco, filteredTotal });
+            const totalRow = { PARTIDA_PL: partida, ...sumRows(filtered, columns) } as ReportRow;
+            map.set(partida, { cecoGroups: groups, cuentaEntriesByCeco, totalRow });
         }
         return map;
     }, [allByCuentaMap, cuentaFilter, columns]);
-
-    const isExpandable = (label: string) => EXPANDABLE.has(label);
-
-    const getDisplayRow = (row: ReportRow, label: string): ReportRow => {
-        if (!isFiltered) return row;
-        const data = partidaData.get(label);
-        if (data) return data.filteredTotal;
-        return row;
-    };
 
     return (
         <div>
@@ -177,68 +168,41 @@ export default function ExpandableFinancialTable(props: ExpandableFinancialTable
                         </tr>
                     </thead>
                     <tbody>
-                        {rows.map((row, idx) => {
-                            const label = row['PARTIDA_PL'] as string;
-                            const isEmpty = !label || label.trim() === '';
-                            const isBold = BOLD_ROWS_PL.has(label);
-                            const canExpand = isExpandable(label);
+                        {PARTIDA_ORDER.map(label => {
+                            const data = partidaData.get(label);
+                            if (!data) return null;
                             const isExpanded = expandedPartidas.has(label);
-                            const displayRow = getDisplayRow(row, label);
-
-                            if (isEmpty) {
-                                return (
-                                    <tr key={idx} className="rpt-row-spacer">
-                                        <td colSpan={columns.length + 2}></td>
-                                    </tr>
-                                );
-                            }
-
-                            const rowClass = isBold ? 'rpt-row-bold' : canExpand ? 'rpt-row-l0' : 'rpt-row-data';
+                            const displayRow = data.totalRow;
 
                             return (
-                                <Frag key={idx}>
+                                <Frag key={label}>
                                     <tr
-                                        className={rowClass}
-                                        onClick={canExpand ? () => togglePartida(label) : undefined}
-                                        style={canExpand ? { cursor: 'pointer' } : undefined}
+                                        className="rpt-row-l0"
+                                        onClick={() => togglePartida(label)}
+                                        style={{ cursor: 'pointer' }}
                                     >
                                         <td className="rpt-sticky">
-                                            {canExpand && (
-                                                <span className="rpt-chevron">{isExpanded ? '\u25BE' : '\u25B8'}</span>
-                                            )}
+                                            <span className="rpt-chevron">{isExpanded ? '\u25BE' : '\u25B8'}</span>
                                             {label}
-                                            {isFiltered && canExpand && (
+                                            {isFiltered && (
                                                 <span className="text-[10px] text-txt-muted ml-2">({cuentaFilter})</span>
                                             )}
                                         </td>
                                         <NumCells row={displayRow} columns={columns} />
-                                        {(() => {
-                                            const total = (isFiltered && canExpand)
-                                                ? (displayRow['TOTAL'] as number | null)
-                                                : getSummaryTotal(displayRow, columns, 'pl');
-                                            return (
-                                                <td className={negClass(total)} style={{ fontWeight: 600 }}>
-                                                    {formatNumber(total)}
-                                                </td>
-                                            );
-                                        })()}
+                                        <TotalCell row={displayRow} columns={columns} />
                                     </tr>
 
-                                    {/* CECO → cuenta categories */}
-                                    {isExpanded && EXPANDABLE.has(label) && (() => {
-                                        const data = partidaData.get(label);
-                                        if (!data) return null;
-                                        return (
-                                            <CecoExpansion
-                                                partida={label}
-                                                cecoGroups={data.cecoGroups}
-                                                cuentaEntriesByCecoGroup={data.cuentaEntriesByCeco}
-                                                expandedCecoGroups={expandedCecoGroups}
-                                                toggleCecoGroup={toggleCecoGroup}
-                                                columns={columns}
-                                            />
-                                        );
-                                    })()}
+                                    {/* CECO → cuenta drill-down */}
+                                    {isExpanded && (
+                                        <CecoExpansion
+                                            partida={label}
+                                            cecoGroups={data.cecoGroups}
+                                            cuentaEntriesByCecoGroup={data.cuentaEntriesByCeco}
+                                            expandedCecoGroups={expandedCecoGroups}
+                                            toggleCecoGroup={toggleCecoGroup}
+                                            columns={columns}
+                                        />
+                                    )}
                                 </Frag>
                             );
                         })}

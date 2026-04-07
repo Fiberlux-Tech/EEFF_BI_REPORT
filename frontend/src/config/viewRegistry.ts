@@ -45,7 +45,7 @@ const VIEW_REGISTRY = [
     { id: 'bs_tributos',            title: 'Tributos por Pagar',                  navLabel: 'Tributos',                   category: 'bs' },
 
     // ── Analisis ────────────────────────────────────────────────
-    { id: 'analysis_pl_finanzas',   title: 'P&L - Finanzas',                     navLabel: 'P&L - Finanzas',              category: 'analysis' },
+    { id: 'analysis_pl_finanzas',   title: 'Analisis de Costos/Gastos',           navLabel: 'Analisis de Costos/Gastos',   category: 'analysis' },
     { id: 'analysis_planilla',      title: 'Analisis de Planilla',               navLabel: 'Analisis de Planilla',        category: 'analysis' },
     { id: 'analysis_proveedores',   title: 'Analisis de Proveedores',            navLabel: 'Analisis de Proveedores',     category: 'analysis' },
 

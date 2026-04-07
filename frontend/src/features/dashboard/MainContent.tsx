@@ -166,11 +166,9 @@ export default function MainContent() {
         }
 
         if (currentView === 'analysis_pl_finanzas') {
-            const rows = getMergedRows('pl_summary', 'PARTIDA_PL', 'pl');
             const cecoKeys = ['CENTRO_COSTO', 'DESC_CECO', 'CUENTA_CONTABLE', 'DESCRIPCION'];
             return (
                 <ExpandableFinancialTable
-                    rows={rows}
                     columns={plColumns}
                     costoByCuenta={getMergedDetailRows('costo_by_cuenta', cecoKeys)}
                     gastoVentaByCuenta={getMergedDetailRows('gasto_venta_by_cuenta', cecoKeys)}
