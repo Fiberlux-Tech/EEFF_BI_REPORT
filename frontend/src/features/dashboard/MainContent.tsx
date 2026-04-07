@@ -30,7 +30,7 @@ export default function MainContent() {
         reportData, currentView, isLoading, error,
         getDisplayColumns, periodRange, getMergedRows, getMergedDetailRows,
         isBsLoading, bsError, selectedCompany, selectedYear,
-        trailingMonthSources, loadedSections,
+        trailingMonthSources, loadedSections, isSectionLoading,
     } = useReport();
 
     const { headcount: headcountMap } = useHeadcount(selectedCompany, selectedYear, periodRange);
@@ -110,7 +110,7 @@ export default function MainContent() {
             }
         }
 
-        // P&L detail section loading spinner
+        // P&L detail section loading spinner — show while this section is not yet loaded
         const sectionName = PL_SECTION_VIEWS[currentView];
         if (sectionName && !loadedSections.has(sectionName)) {
             return (
