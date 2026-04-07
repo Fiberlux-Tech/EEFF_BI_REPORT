@@ -163,21 +163,20 @@ export default function MainContent() {
 
         if (currentView === 'analysis_pl_finanzas') {
             const rows = getMergedRows('pl_summary', 'PARTIDA_PL', 'pl');
-            const cuentaKeys = ['CUENTA_CONTABLE', 'DESCRIPCION'];
             const cecoKeys = ['CENTRO_COSTO', 'DESC_CECO', 'CUENTA_CONTABLE', 'DESCRIPCION'];
             return (
                 <ExpandableFinancialTable
                     rows={rows}
                     columns={plColumns}
                     costoByCuenta={getMergedDetailRows('costo_by_cuenta', cecoKeys)}
-                    gastoVentaByCuenta={getMergedDetailRows('gasto_venta_by_cuenta', cuentaKeys)}
-                    gastoAdminByCuenta={getMergedDetailRows('gasto_admin_by_cuenta', cuentaKeys)}
-                    dyaCostoByCuenta={getMergedDetailRows('dya_costo_by_cuenta', cuentaKeys)}
-                    dyaGastoByCuenta={getMergedDetailRows('dya_gasto_by_cuenta', cuentaKeys)}
-                    otrosIngresosByCuenta={getMergedDetailRows('otros_ingresos_by_cuenta', cuentaKeys)}
-                    otrosEgresosByCuenta={getMergedDetailRows('otros_egresos_by_cuenta', cuentaKeys)}
-                    participacionByCuenta={getMergedDetailRows('participacion_by_cuenta', cuentaKeys)}
-                    provisionByCuenta={getMergedDetailRows('provision_by_cuenta', cuentaKeys)}
+                    gastoVentaByCuenta={getMergedDetailRows('gasto_venta_by_cuenta', cecoKeys)}
+                    gastoAdminByCuenta={getMergedDetailRows('gasto_admin_by_cuenta', cecoKeys)}
+                    dyaCostoByCuenta={getMergedDetailRows('dya_costo_by_cuenta', cecoKeys)}
+                    dyaGastoByCuenta={getMergedDetailRows('dya_gasto_by_cuenta', cecoKeys)}
+                    otrosIngresosByCuenta={getMergedDetailRows('otros_ingresos_by_cuenta', cecoKeys)}
+                    otrosEgresosByCuenta={getMergedDetailRows('otros_egresos_by_cuenta', cecoKeys)}
+                    participacionByCuenta={getMergedDetailRows('participacion_by_cuenta', cecoKeys)}
+                    provisionByCuenta={getMergedDetailRows('provision_by_cuenta', cecoKeys)}
                 />
             );
         }

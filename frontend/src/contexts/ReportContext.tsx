@@ -6,6 +6,7 @@ import { isBsView, isAnalysisView } from '@/config/viewRegistry';
 import type { View } from '@/config/viewRegistry';
 import { getTrailing12MonthSources, buildDisplayColumns } from '@/utils/displayColumns';
 import { mergeTrailingRows, mergeTrailingDetailRows, mergeTrailingBSRows } from '@/utils/mergeTrailing';
+import { buildExpandedPLRows } from '@/utils/expandedPL';
 
 export type { View };
 export { isBsView, isAnalysisView };
@@ -43,8 +44,8 @@ interface ReportState {
     /** Whether BS data is being fetched separately */
     isBsLoading: boolean;
     bsError: string | null;
-    /** Intercompany filter: 'all' = no filter, 'only_ic' = only intercompany, 'ex_ic' = exclude intercompany */
-    intercompanyFilter: 'all' | 'only_ic' | 'ex_ic';
+    /** Intercompany filter: 'all' = no filter, 'only_ic' = only intercompany, 'ex_ic' = exclude intercompany, 'expanded' = show IC as separate rows */
+    intercompanyFilter: 'all' | 'only_ic' | 'ex_ic' | 'expanded';
     /** Track which P&L detail sections have been loaded */
     loadedSections: Set<string>;
     /** Whether a section is currently being fetched */
@@ -60,7 +61,7 @@ type ReportAction =
     | { type: 'SET_GRANULARITY'; granularity: Granularity }
     | { type: 'SET_PERIOD_RANGE'; periodRange: PeriodRange }
     | { type: 'SET_VIEW'; view: View }
-    | { type: 'SET_INTERCOMPANY_FILTER'; filter: 'all' | 'only_ic' | 'ex_ic' }
+    | { type: 'SET_INTERCOMPANY_FILTER'; filter: 'all' | 'only_ic' | 'ex_ic' | 'expanded' }
     | { type: 'LOAD_START' }
     | { type: 'LOAD_PL_SUCCESS'; data: PLReportData; prevYearData: PLReportData | null }
     | { type: 'LOAD_ERROR'; error: string }
@@ -201,8 +202,8 @@ interface IReportContext {
     setGranularity: (g: Granularity) => void;
     periodRange: PeriodRange;
     setPeriodRange: (r: PeriodRange) => void;
-    intercompanyFilter: 'all' | 'only_ic' | 'ex_ic';
-    setIntercompanyFilter: (v: 'all' | 'only_ic' | 'ex_ic') => void;
+    intercompanyFilter: 'all' | 'only_ic' | 'ex_ic' | 'expanded';
+    setIntercompanyFilter: (v: 'all' | 'only_ic' | 'ex_ic' | 'expanded') => void;
     reportData: ReportData | null;
     prevYearData: ReportData | null;
     currentView: View;
@@ -450,6 +451,21 @@ export function ReportProvider({ children }: { children: React.ReactNode }) {
     const getMergedRows = useCallback(
         (key: keyof ReportData, labelKey: string, variant: 'pl' | 'bs'): ReportRow[] => {
             if (!state.reportData) return [];
+
+            // Expanded IC mode: build interleaved rows from all three variants
+            if (key === 'pl_summary' && state.intercompanyFilter === 'expanded') {
+                const allRows = (state.reportData['pl_summary'] as ReportRow[] | undefined) ?? [];
+                const exIcRows = (state.reportData['pl_summary_ex_ic'] as ReportRow[] | undefined) ?? [];
+                const onlyIcRows = (state.reportData['pl_summary_only_ic'] as ReportRow[] | undefined) ?? [];
+                const expanded = buildExpandedPLRows(allRows, exIcRows, onlyIcRows);
+                if (state.periodRange === 'ytd') return expanded;
+                const prevAll = (state.prevYearData?.['pl_summary'] as ReportRow[] | undefined) ?? [];
+                const prevExIc = (state.prevYearData?.['pl_summary_ex_ic'] as ReportRow[] | undefined) ?? [];
+                const prevOnlyIc = (state.prevYearData?.['pl_summary_only_ic'] as ReportRow[] | undefined) ?? [];
+                const prevExpanded = buildExpandedPLRows(prevAll, prevExIc, prevOnlyIc);
+                return mergeTrailingRows(expanded, prevExpanded, labelKey, trailingMonthSources, state.selectedYear);
+            }
+
             // When intercompany filter is active, swap pl_summary for the filtered variant
             let effectiveKey = key;
             if (key === 'pl_summary' && state.intercompanyFilter === 'ex_ic') effectiveKey = 'pl_summary_ex_ic';

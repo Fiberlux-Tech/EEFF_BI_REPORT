@@ -33,6 +33,7 @@ export default function FinancialTable({ rows, columns, labelKey, showTotal = fa
                         const label = row[labelKey] as string;
                         const isEmpty = !label || label.trim() === '';
                         const isBold = boldSet.has(label);
+                        const isIcRow = label?.endsWith(' INTERCOMPANY') ?? false;
                         const isSection = variant === 'bs' && label && !isBold && columns.length > 0 && getCellValue(row, columns[0]) === null;
 
                         if (isEmpty) {
@@ -43,7 +44,7 @@ export default function FinancialTable({ rows, columns, labelKey, showTotal = fa
                             );
                         }
 
-                        const rowClass = isBold ? 'rpt-row-bold' : isSection ? 'rpt-row-section' : 'rpt-row-data';
+                        const rowClass = isBold ? 'rpt-row-bold' : isSection ? 'rpt-row-section' : isIcRow ? 'rpt-row-ic' : 'rpt-row-data';
 
                         return (
                             <tr key={idx} className={rowClass}>

@@ -108,6 +108,17 @@
   }
   .rpt-row-data td:first-child { padding-left: 0; }
 
+  /* ─── Intercompany breakdown row ─── */
+  .rpt-row-ic td {
+    font-size: 11px;
+    font-weight: 400;
+    color: #888;
+    font-style: italic;
+    padding: 6px 12px;
+    border-bottom: 1px dotted #e5e5e5;
+  }
+  .rpt-row-ic td:first-child { padding-left: 1.25rem; }
+
   /* ─── Bold row (subtotals: UTILIDAD BRUTA, etc.) ─── */
   .rpt-row-bold td {
     font-size: 13px;

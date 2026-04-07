@@ -199,10 +199,11 @@ export default function TopBar() {
                     {!isBsView(currentView) && (
                         <select
                             value={intercompanyFilter}
-                            onChange={e => setIntercompanyFilter(e.target.value as 'all' | 'only_ic' | 'ex_ic')}
+                            onChange={e => setIntercompanyFilter(e.target.value as 'all' | 'only_ic' | 'ex_ic' | 'expanded')}
                             className="select-base"
                         >
                             <option value="all">Todos</option>
+                            <option value="expanded">Desglose IC</option>
                             <option value="only_ic">Solo IC</option>
                             <option value="ex_ic">Sin IC</option>
                         </select>

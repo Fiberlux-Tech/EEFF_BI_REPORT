@@ -8,11 +8,10 @@ import type { CuentaEntry } from '@/config/cecoGroups';
 import { buildCuentaEntries, sumRows, buildCecoGroups } from '@/utils/cecoGrouping';
 import type { CecoGroup } from '@/utils/cecoGrouping';
 
-// ── Which PARTIDA_PL rows are expandable and how ─────────────────────
+// ── Which PARTIDA_PL rows are expandable ─────────────────────────────
 
-const CECO_EXPANDABLE = new Set(['COSTO']);
-const CUENTA_EXPANDABLE = new Set([
-    'GASTO VENTA', 'GASTO ADMIN', 'D&A - COSTO', 'D&A - GASTO',
+const EXPANDABLE = new Set([
+    'COSTO', 'GASTO VENTA', 'GASTO ADMIN', 'D&A - COSTO', 'D&A - GASTO',
     'OTROS INGRESOS', 'OTROS EGRESOS', 'PARTICIPACION DE TRABAJADORES', 'PROVISION INCOBRABLE',
 ]);
 
@@ -117,7 +116,8 @@ export default function ExpandableFinancialTable(props: ExpandableFinancialTable
 
     const isFiltered = cuentaFilter !== 'all';
 
-    const byCuentaMap: Record<string, ReportRow[]> = useMemo(() => ({
+    const allByCuentaMap: Record<string, ReportRow[]> = useMemo(() => ({
+        'COSTO': costoByCuenta,
         'GASTO VENTA': gastoVentaByCuenta,
         'GASTO ADMIN': gastoAdminByCuenta,
         'D&A - COSTO': dyaCostoByCuenta,
@@ -126,47 +126,39 @@ export default function ExpandableFinancialTable(props: ExpandableFinancialTable
         'OTROS EGRESOS': otrosEgresosByCuenta,
         'PARTICIPACION DE TRABAJADORES': participacionByCuenta,
         'PROVISION INCOBRABLE': provisionByCuenta,
-    }), [gastoVentaByCuenta, gastoAdminByCuenta, dyaCostoByCuenta, dyaGastoByCuenta, otrosIngresosByCuenta, otrosEgresosByCuenta, participacionByCuenta, provisionByCuenta]);
+    }), [costoByCuenta, gastoVentaByCuenta, gastoAdminByCuenta, dyaCostoByCuenta, dyaGastoByCuenta, otrosIngresosByCuenta, otrosEgresosByCuenta, participacionByCuenta, provisionByCuenta]);
 
     const filterCuenta = (rows: ReportRow[]): ReportRow[] => {
         if (!isFiltered) return rows;
         return rows.filter(r => String(r['CUENTA_CONTABLE'] ?? '').startsWith(cuentaFilter));
     };
 
-    const filteredCostoCuenta = useMemo(() => filterCuenta(costoByCuenta), [costoByCuenta, cuentaFilter]);
-    const cecoGroups = useMemo(() => buildCecoGroups(filteredCostoCuenta, columns), [filteredCostoCuenta, columns]);
-    const cuentaEntriesByCecoGroup = useMemo(() => {
-        const map = new Map<string, CuentaEntry[]>();
-        for (const g of cecoGroups) {
-            map.set(g.label, buildCuentaEntries(g.cuentaRows, columns));
-        }
-        return map;
-    }, [cecoGroups, columns]);
-
-    const cuentaEntriesByPartida = useMemo(() => {
-        const map = new Map<string, { entries: CuentaEntry[]; filteredTotal: ReportRow }>();
-        for (const partida of CUENTA_EXPANDABLE) {
-            const raw = byCuentaMap[partida] ?? [];
+    const partidaData = useMemo(() => {
+        const map = new Map<string, {
+            cecoGroups: CecoGroup[];
+            cuentaEntriesByCeco: Map<string, CuentaEntry[]>;
+            filteredTotal: ReportRow;
+        }>();
+        for (const partida of EXPANDABLE) {
+            const raw = allByCuentaMap[partida] ?? [];
             const filtered = filterCuenta(raw);
-            const entries = buildCuentaEntries(filtered, columns);
+            const groups = buildCecoGroups(filtered, columns);
+            const cuentaEntriesByCeco = new Map<string, CuentaEntry[]>();
+            for (const g of groups) {
+                cuentaEntriesByCeco.set(g.label, buildCuentaEntries(g.cuentaRows, columns));
+            }
             const filteredTotal = { PARTIDA_PL: partida, ...sumRows(filtered, columns) } as ReportRow;
-            map.set(partida, { entries, filteredTotal });
+            map.set(partida, { cecoGroups: groups, cuentaEntriesByCeco, filteredTotal });
         }
         return map;
-    }, [byCuentaMap, cuentaFilter, columns]);
+    }, [allByCuentaMap, cuentaFilter, columns]);
 
-    const filteredCostoRow = useMemo(
-        () => isFiltered ? { PARTIDA_PL: 'COSTO', ...sumRows(filteredCostoCuenta, columns) } as ReportRow : null,
-        [isFiltered, filteredCostoCuenta, columns],
-    );
-
-    const isExpandable = (label: string) => CECO_EXPANDABLE.has(label) || CUENTA_EXPANDABLE.has(label);
+    const isExpandable = (label: string) => EXPANDABLE.has(label);
 
     const getDisplayRow = (row: ReportRow, label: string): ReportRow => {
         if (!isFiltered) return row;
-        if (label === 'COSTO' && filteredCostoRow) return filteredCostoRow;
-        const partidaData = cuentaEntriesByPartida.get(label);
-        if (partidaData) return partidaData.filteredTotal;
+        const data = partidaData.get(label);
+        if (data) return data.filteredTotal;
         return row;
     };
 
@@ -255,30 +247,23 @@ export default function ExpandableFinancialTable(props: ExpandableFinancialTable
                                         })()}
                                     </tr>
 
-                                    {/* COSTO expansion: CECO groups → cuenta categories → cuentas */}
-                                    {isExpanded && CECO_EXPANDABLE.has(label) && (
-                                        <CecoExpansion
-                                            partida={label}
-                                            cecoGroups={cecoGroups}
-                                            cuentaEntriesByCecoGroup={cuentaEntriesByCecoGroup}
-                                            expandedCecoGroups={expandedCecoGroups}
-                                            expandedCuentaCats={expandedCuentaCats}
-                                            toggleCecoGroup={toggleCecoGroup}
-                                            toggleCuentaCat={toggleCuentaCat}
-                                            columns={columns}
-                                        />
-                                    )}
-
-                                    {/* Simple expansion: cuenta categories → cuentas */}
-                                    {isExpanded && CUENTA_EXPANDABLE.has(label) && (
-                                        <CuentaExpansion
-                                            partida={label}
-                                            entries={cuentaEntriesByPartida.get(label)?.entries ?? []}
-                                            expandedCuentaCats={expandedCuentaCats}
-                                            toggleCuentaCat={toggleCuentaCat}
-                                            columns={columns}
-                                        />
-                                    )}
+                                    {/* CECO → cuenta categories → cuentas */}
+                                    {isExpanded && EXPANDABLE.has(label) && (() => {
+                                        const data = partidaData.get(label);
+                                        if (!data) return null;
+                                        return (
+                                            <CecoExpansion
+                                                partida={label}
+                                                cecoGroups={data.cecoGroups}
+                                                cuentaEntriesByCecoGroup={data.cuentaEntriesByCeco}
+                                                expandedCecoGroups={expandedCecoGroups}
+                                                expandedCuentaCats={expandedCuentaCats}
+                                                toggleCecoGroup={toggleCecoGroup}
+                                                toggleCuentaCat={toggleCuentaCat}
+                                                columns={columns}
+                                            />
+                                        );
+                                    })()}
                                 </Frag>
                             );
                         })}
@@ -342,29 +327,7 @@ function CecoExpansion({ partida, cecoGroups, cuentaEntriesByCecoGroup, expanded
     );
 }
 
-// ── Simple cuenta expansion (GASTO VENTA, etc.) ──────────────────────
-
-function CuentaExpansion({ partida, entries, expandedCuentaCats, toggleCuentaCat, columns }: {
-    partida: string;
-    entries: CuentaEntry[];
-    expandedCuentaCats: Set<string>;
-    toggleCuentaCat: (key: string) => void;
-    columns: DisplayColumn[];
-}) {
-    return (
-        <CuentaEntryRows
-            entries={entries}
-            parentKey={partida}
-            expandedCuentaCats={expandedCuentaCats}
-            toggleCuentaCat={toggleCuentaCat}
-            columns={columns}
-            catLevel="l1"
-            leafLevel="l2"
-        />
-    );
-}
-
-// ── Cuenta entry rows (shared between CECO and simple modes) ─────────
+// ── Cuenta entry rows ────────────────────────────────────────────────
 
 function CuentaEntryRows({ entries, parentKey, expandedCuentaCats, toggleCuentaCat, columns, catLevel, leafLevel }: {
     entries: CuentaEntry[];

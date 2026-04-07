@@ -223,34 +223,34 @@ def _compute_costo(df_stmt, preagg):
 def _compute_gasto_venta(df_stmt, preagg):
     return {
         "gasto_venta": detail_by_ceco(df_stmt, ["GASTO VENTA"], ascending=True, with_total_row=True, preagg=preagg),
-        "gasto_venta_by_cuenta": detail_by_cuenta(df_stmt, ["GASTO VENTA"], preagg=preagg),
+        "gasto_venta_by_cuenta": detail_ceco_by_cuenta(df_stmt, ["GASTO VENTA"], preagg=preagg),
     }
 
 
 def _compute_gasto_admin(df_stmt, preagg):
     return {
         "gasto_admin": detail_by_ceco(df_stmt, ["GASTO ADMIN"], ascending=True, with_total_row=True, preagg=preagg),
-        "gasto_admin_by_cuenta": detail_by_cuenta(df_stmt, ["GASTO ADMIN"], preagg=preagg),
+        "gasto_admin_by_cuenta": detail_ceco_by_cuenta(df_stmt, ["GASTO ADMIN"], preagg=preagg),
     }
 
 
 def _compute_otros_egresos(df_stmt, preagg):
     return {
         "otros_ingresos": detail_by_cuenta(df_stmt, ["OTROS INGRESOS"], with_total_row=True, preagg=preagg),
-        "otros_ingresos_by_cuenta": detail_by_cuenta(df_stmt, ["OTROS INGRESOS"], preagg=preagg),
+        "otros_ingresos_by_cuenta": detail_ceco_by_cuenta(df_stmt, ["OTROS INGRESOS"], preagg=preagg),
         "otros_egresos": detail_by_cuenta(df_stmt, ["OTROS EGRESOS"], ascending=True, with_total_row=True, preagg=preagg),
-        "otros_egresos_by_cuenta": detail_by_cuenta(df_stmt, ["OTROS EGRESOS"], preagg=preagg),
-        "participacion_by_cuenta": detail_by_cuenta(df_stmt, ["PARTICIPACION DE TRABAJADORES"], preagg=preagg),
-        "provision_by_cuenta": detail_by_cuenta(df_stmt, ["PROVISION INCOBRABLE"], preagg=preagg),
+        "otros_egresos_by_cuenta": detail_ceco_by_cuenta(df_stmt, ["OTROS EGRESOS"], preagg=preagg),
+        "participacion_by_cuenta": detail_ceco_by_cuenta(df_stmt, ["PARTICIPACION DE TRABAJADORES"], preagg=preagg),
+        "provision_by_cuenta": detail_ceco_by_cuenta(df_stmt, ["PROVISION INCOBRABLE"], preagg=preagg),
     }
 
 
 def _compute_dya(df_stmt, preagg):
     return {
         "dya_costo": detail_by_ceco(df_stmt, ["D&A - COSTO"], ascending=True, with_total_row=True, preagg=preagg),
-        "dya_costo_by_cuenta": detail_by_cuenta(df_stmt, ["D&A - COSTO"], preagg=preagg),
+        "dya_costo_by_cuenta": detail_ceco_by_cuenta(df_stmt, ["D&A - COSTO"], preagg=preagg),
         "dya_gasto": detail_by_ceco(df_stmt, ["D&A - GASTO"], ascending=True, with_total_row=True, preagg=preagg),
-        "dya_gasto_by_cuenta": detail_by_cuenta(df_stmt, ["D&A - GASTO"], preagg=preagg),
+        "dya_gasto_by_cuenta": detail_ceco_by_cuenta(df_stmt, ["D&A - GASTO"], preagg=preagg),
     }
 
 
@@ -265,14 +265,14 @@ def _compute_resultado_financiero(df_stmt, preagg):
 def _compute_analysis_pl_finanzas(df_stmt, preagg):
     return {
         "costo_by_cuenta": detail_ceco_by_cuenta(df_stmt, ["COSTO"], preagg=preagg),
-        "gasto_venta_by_cuenta": detail_by_cuenta(df_stmt, ["GASTO VENTA"], preagg=preagg),
-        "gasto_admin_by_cuenta": detail_by_cuenta(df_stmt, ["GASTO ADMIN"], preagg=preagg),
-        "dya_costo_by_cuenta": detail_by_cuenta(df_stmt, ["D&A - COSTO"], preagg=preagg),
-        "dya_gasto_by_cuenta": detail_by_cuenta(df_stmt, ["D&A - GASTO"], preagg=preagg),
-        "otros_ingresos_by_cuenta": detail_by_cuenta(df_stmt, ["OTROS INGRESOS"], preagg=preagg),
-        "otros_egresos_by_cuenta": detail_by_cuenta(df_stmt, ["OTROS EGRESOS"], preagg=preagg),
-        "participacion_by_cuenta": detail_by_cuenta(df_stmt, ["PARTICIPACION DE TRABAJADORES"], preagg=preagg),
-        "provision_by_cuenta": detail_by_cuenta(df_stmt, ["PROVISION INCOBRABLE"], preagg=preagg),
+        "gasto_venta_by_cuenta": detail_ceco_by_cuenta(df_stmt, ["GASTO VENTA"], preagg=preagg),
+        "gasto_admin_by_cuenta": detail_ceco_by_cuenta(df_stmt, ["GASTO ADMIN"], preagg=preagg),
+        "dya_costo_by_cuenta": detail_ceco_by_cuenta(df_stmt, ["D&A - COSTO"], preagg=preagg),
+        "dya_gasto_by_cuenta": detail_ceco_by_cuenta(df_stmt, ["D&A - GASTO"], preagg=preagg),
+        "otros_ingresos_by_cuenta": detail_ceco_by_cuenta(df_stmt, ["OTROS INGRESOS"], preagg=preagg),
+        "otros_egresos_by_cuenta": detail_ceco_by_cuenta(df_stmt, ["OTROS EGRESOS"], preagg=preagg),
+        "participacion_by_cuenta": detail_ceco_by_cuenta(df_stmt, ["PARTICIPACION DE TRABAJADORES"], preagg=preagg),
+        "provision_by_cuenta": detail_ceco_by_cuenta(df_stmt, ["PROVISION INCOBRABLE"], preagg=preagg),
     }
 
 

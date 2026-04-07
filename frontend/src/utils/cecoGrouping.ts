@@ -1,6 +1,5 @@
 import type { ReportRow, DisplayColumn } from '@/types';
 import {
-    CECO_GROUPS, OTROS_LABEL, getGroupLabel,
     getCuentaPrefix, CUENTA_PREFIX_LABELS, KNOWN_PREFIXES,
 } from '@/config/cecoGroups';
 import type { CuentaEntry } from '@/config/cecoGroups';
@@ -80,24 +79,23 @@ export function buildCuentaEntries(cuentaRows: ReportRow[], columns: DisplayColu
 
 // ── CECO group building (COSTO only) ────────────────────────────────
 
-export function buildCecoGroups(costoByCuenta: ReportRow[], columns: DisplayColumn[]): CecoGroup[] {
-    const cuentaByGroup = new Map<string, ReportRow[]>();
-    for (const row of costoByCuenta) {
+export function buildCecoGroups(cuentaRows: ReportRow[], columns: DisplayColumn[]): CecoGroup[] {
+    const byCeco = new Map<string, { desc: string; rows: ReportRow[] }>();
+    for (const row of cuentaRows) {
         const cc = String(row['CENTRO_COSTO'] ?? '');
-        const groupLabel = getGroupLabel(cc);
-        if (!cuentaByGroup.has(groupLabel)) cuentaByGroup.set(groupLabel, []);
-        cuentaByGroup.get(groupLabel)!.push(row);
+        if (!cc) continue;
+        if (!byCeco.has(cc)) byCeco.set(cc, { desc: String(row['DESC_CECO'] ?? ''), rows: [] });
+        byCeco.get(cc)!.rows.push(row);
     }
 
-    const result: CecoGroup[] = [];
-    for (const g of CECO_GROUPS) {
-        const rows = cuentaByGroup.get(g.label);
-        if (!rows || rows.length === 0) continue;
-        result.push({ label: g.label, data: sumRows(rows, columns) as ReportRow, cuentaRows: rows });
-    }
-    const otrosRows = cuentaByGroup.get(OTROS_LABEL);
-    if (otrosRows && otrosRows.length > 0) {
-        result.push({ label: OTROS_LABEL, data: sumRows(otrosRows, columns) as ReportRow, cuentaRows: otrosRows });
-    }
-    return result;
+    return Array.from(byCeco.keys())
+        .sort()
+        .map(code => {
+            const { desc, rows } = byCeco.get(code)!;
+            return {
+                label: desc ? `${code} - ${desc}` : code,
+                data: sumRows(rows, columns) as ReportRow,
+                cuentaRows: rows,
+            };
+        });
 }
