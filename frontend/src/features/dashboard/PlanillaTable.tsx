@@ -484,7 +484,26 @@ export default function PlanillaTable({ rows, columns, revenueRow, headcountMap,
         return rows.filter(r => String(r['CUENTA_CONTABLE'] ?? '') !== VARIABLE_CUENTA);
     }, [rows, planillaFilter]);
 
-    const { partidas } = useMemo(() => buildHierarchy(filteredRows, columns), [filteredRows, columns]);
+    const { partidas: allPartidas } = useMemo(() => buildHierarchy(filteredRows, columns), [filteredRows, columns]);
+
+    // Separate the synthetic "TOTAL" partida (added by trailing merge) from real partidas
+    const partidas = useMemo(() => allPartidas.filter(p => p.name !== 'TOTAL'), [allPartidas]);
+
+    // Compute grand totals across all real partidas (for the summary TOTAL row)
+    const grandTotals = useMemo(() => {
+        const monthKeys = new Set<string>();
+        for (const col of columns) {
+            for (const m of col.sourceMonths) monthKeys.add(m);
+        }
+        const sums: Record<string, number> = {};
+        for (const p of partidas) {
+            for (const m of monthKeys) {
+                sums[m] = (sums[m] ?? 0) + (p.totals[m] ?? 0);
+            }
+            sums['TOTAL'] = (sums['TOTAL'] ?? 0) + (p.totals['TOTAL'] ?? 0);
+        }
+        return sums;
+    }, [partidas, columns]);
 
     const colYm = useMemo(
         () => buildColYm(columns, selectedYear, monthSources),
@@ -652,6 +671,53 @@ export default function PlanillaTable({ rows, columns, revenueRow, headcountMap,
         if (metric === 'gasto') return formatEmpty(cuenta.row['TOTAL'] as number | null);
         if (metric === 'headcount') return fmtHc(cecoHcAvgVal != null ? Math.round(cecoHcAvgVal) : null);
         return fmtPw(perWorkerValue(cuenta.row['TOTAL'] as number | null, cecoHcAvgVal));
+    };
+
+    // ── Grand total metric resolvers ──────────────────────────────────
+
+    /** Sum a metric across all partidas for a given column. */
+    const resolveGrandMetric = (metric: MetricType, col: DisplayColumn): React.ReactNode => {
+        if (metric === 'gasto') {
+            const val = getCellValue(grandTotals as ReportRow, col);
+            return formatEmpty(val);
+        }
+        if (!headcountMap) return '';
+        if (metric === 'headcount') {
+            let total = 0;
+            for (const p of partidas) total += (partidaHcPerCol(p, headcountMap, col, colYm) ?? 0);
+            return fmtHc(total > 0 ? total : null);
+        }
+        // salario: weighted average across all partidas
+        let costSum = 0, hcSum = 0;
+        for (const p of partidas) {
+            const hc = partidaHcPerCol(p, headcountMap, col, colYm) ?? 0;
+            if (hc > 0) {
+                costSum += (getCellValue(p.totals as ReportRow, col) ?? 0);
+                hcSum += hc;
+            }
+        }
+        return fmtPw(hcSum > 0 ? costSum / hcSum : null);
+    };
+
+    /** Total/average metric across all partidas. */
+    const resolveGrandTotal = (metric: MetricType): React.ReactNode => {
+        if (metric === 'gasto') return formatEmpty(grandTotals['TOTAL'] ?? null);
+        if (!headcountMap) return '';
+        if (metric === 'headcount') {
+            let total = 0;
+            for (const p of partidas) total += (partidaHcAvg(p, headcountMap, colYm) ?? 0);
+            return fmtHc(total > 0 ? Math.round(total) : null);
+        }
+        // salario
+        let costSum = 0, hcSum = 0;
+        for (const p of partidas) {
+            const avg = partidaHcAvg(p, headcountMap, colYm) ?? 0;
+            if (avg > 0) {
+                costSum += (p.totals['TOTAL'] ?? 0);
+                hcSum += avg;
+            }
+        }
+        return fmtPw(hcSum > 0 ? costSum / hcSum : null);
     };
 
     // Whether the primary metric is the default (gasto from row data) or needs a custom getter
@@ -847,6 +913,47 @@ export default function PlanillaTable({ rows, columns, revenueRow, headcountMap,
                         );
                     })}
 
+                    {/* Grand TOTAL row */}
+                    <tr className="rpt-row-spacer"><td colSpan={colSpanAll}></td></tr>
+                    <tr className="rpt-row-bold">
+                        <td className="rpt-sticky">
+                            <span className="rpt-chevron" style={{ visibility: 'hidden' }}>{'\u25B8'}</span>
+                            TOTAL
+                        </td>
+                        {isDual ? (
+                            <>
+                                {columns.map(col => {
+                                    if (activeHeaders && !activeHeaders.has(col.header)) {
+                                        return (
+                                            <Fragment key={col.header}>
+                                                <td className="rpt-inactive">{'\u2014'}</td>
+                                                <td className="rpt-col-metric"></td>
+                                            </Fragment>
+                                        );
+                                    }
+                                    return (
+                                        <Fragment key={col.header}>
+                                            <td>{resolveGrandMetric(effectivePrimary, col)}</td>
+                                            <td className="rpt-col-metric">{resolveGrandMetric(effectiveSecondary as MetricType, col)}</td>
+                                        </Fragment>
+                                    );
+                                })}
+                                <td className="rpt-col-total-val">{resolveGrandTotal(effectivePrimary)}</td>
+                                <td className="rpt-col-metric">{resolveGrandTotal(effectiveSecondary as MetricType)}</td>
+                            </>
+                        ) : (
+                            <>
+                                {columns.map(col => {
+                                    if (activeHeaders && !activeHeaders.has(col.header)) {
+                                        return <td key={col.header} className="rpt-inactive">{'\u2014'}</td>;
+                                    }
+                                    return <td key={col.header}>{resolveGrandMetric(effectivePrimary, col)}</td>;
+                                })}
+                                <td className="rpt-col-total-val">{resolveGrandTotal(effectivePrimary)}</td>
+                            </>
+                        )}
+                    </tr>
+
                 </tbody>
             </table>
             </div>
@@ -908,6 +1015,17 @@ export default function PlanillaTable({ rows, columns, revenueRow, headcountMap,
                                     </Fragment>
                                 );
                             })}
+
+                            {/* Grand TOTAL row */}
+                            <tr className="rpt-row-spacer"><td colSpan={columns.length + 2}></td></tr>
+                            <tr className="rpt-row-bold">
+                                <td className="rpt-sticky">
+                                    <span className="rpt-chevron" style={{ visibility: 'hidden' }}>{'\u25B8'}</span>
+                                    TOTAL
+                                </td>
+                                <NumCellsPct row={grandTotals as ReportRow} revenueRow={revenueRow} columns={columns} activeHeaders={activeHeaders} />
+                                <TotalCellPct costVal={grandTotals['TOTAL'] ?? null} revenueVal={revTotal} />
+                            </tr>
 
                         </tbody>
                     </table>
