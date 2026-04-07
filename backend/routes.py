@@ -195,6 +195,7 @@ def get_detail(body, company, year):
     month = body.get('month', '').strip().upper() if body.get('month') else None
     filter_col = body.get('filter_col')
     filter_val = body.get('filter_val')
+    ic_filter = body.get('ic_filter', 'all')
 
     if month and month not in MONTH_NAMES_SET:
         raise RequestValidationError(f'Mes invalido: {month}')
@@ -205,8 +206,12 @@ def get_detail(body, company, year):
     if not partida:
         raise RequestValidationError('partida es requerido')
 
+    if ic_filter not in ('all', 'ex_ic', 'only_ic'):
+        raise RequestValidationError(f'ic_filter invalido: {ic_filter}')
+
     records = get_detail_records(company, year, partida, month,
-                                 filter_col=filter_col, filter_val=filter_val)
+                                 filter_col=filter_col, filter_val=filter_val,
+                                 ic_filter=ic_filter)
     return ok({'records': records})
 
 

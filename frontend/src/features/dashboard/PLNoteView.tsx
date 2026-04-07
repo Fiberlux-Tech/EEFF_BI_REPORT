@@ -66,7 +66,7 @@ function detailReducer(state: DetailState, action: DetailAction): DetailState {
 
 
 export default function PLNoteView({ tables, columns, year, showTitles }: PLNoteViewProps) {
-    const { selectedCompany, selectedYear, periodRange, trailingMonthSources } = useReport();
+    const { selectedCompany, selectedYear, periodRange, trailingMonthSources, intercompanyFilter } = useReport();
     const [state, dispatch] = useReducer(detailReducer, detailInitialState);
 
     const companyRef = useRef(selectedCompany);
@@ -89,8 +89,31 @@ export default function PLNoteView({ tables, columns, year, showTitles }: PLNote
         dispatch({ type: 'SET_FILTER', col, value });
     };
 
+    // Map intercompanyFilter to API ic_filter value ("expanded" → "all" for detail drill-down)
+    const icFilterRef = useRef(intercompanyFilter);
+    useEffect(() => { icFilterRef.current = intercompanyFilter; }, [intercompanyFilter]);
+
     const handleCellClick = useCallback(async (sel: CellSelection) => {
         dispatch({ type: 'SELECT', selection: sel });
+
+        // Resolve ic_filter: "expanded" falls back to "all" in detail views
+        const icApi = icFilterRef.current === 'ex_ic' || icFilterRef.current === 'only_ic'
+            ? icFilterRef.current : 'all';
+
+        const buildBody = (yr: number, month?: string): Record<string, unknown> => {
+            const body: Record<string, unknown> = {
+                company: companyRef.current,
+                year: yr,
+                partida: sel.partida,
+            };
+            if (month) body.month = month;
+            if (sel.filterCol && sel.filterVal != null) {
+                body.filter_col = sel.filterCol;
+                body.filter_val = sel.filterVal;
+            }
+            if (icApi !== 'all') body.ic_filter = icApi;
+            return body;
+        };
 
         try {
             const selMonths = sel.month ? sel.month.split(',') : null;
@@ -111,17 +134,7 @@ export default function PLNoteView({ tables, columns, year, showTitles }: PLNote
                 const allRows: ReportRow[] = [];
                 for (const [fetchYear, months] of byYear) {
                     for (const month of months) {
-                        const body: Record<string, unknown> = {
-                            company: companyRef.current,
-                            year: fetchYear,
-                            partida: sel.partida,
-                            month,
-                        };
-                        if (sel.filterCol && sel.filterVal != null) {
-                            body.filter_col = sel.filterCol;
-                            body.filter_val = sel.filterVal;
-                        }
-                        const resp = await api.post<{ records: ReportRow[] }>(API_CONFIG.ENDPOINTS.DATA_DETAIL, body);
+                        const resp = await api.post<{ records: ReportRow[] }>(API_CONFIG.ENDPOINTS.DATA_DETAIL, buildBody(fetchYear, month));
                         allRows.push(...resp.records);
                     }
                 }
@@ -129,32 +142,15 @@ export default function PLNoteView({ tables, columns, year, showTitles }: PLNote
             } else if (selMonths && selMonths.length > 1) {
                 const allRows: ReportRow[] = [];
                 for (const month of selMonths) {
-                    const body: Record<string, unknown> = {
-                        company: companyRef.current,
-                        year: yearRef.current,
-                        partida: sel.partida,
-                        month,
-                    };
-                    if (sel.filterCol && sel.filterVal != null) {
-                        body.filter_col = sel.filterCol;
-                        body.filter_val = sel.filterVal;
-                    }
-                    const resp = await api.post<{ records: ReportRow[] }>(API_CONFIG.ENDPOINTS.DATA_DETAIL, body);
+                    const resp = await api.post<{ records: ReportRow[] }>(API_CONFIG.ENDPOINTS.DATA_DETAIL, buildBody(yearRef.current, month));
                     allRows.push(...resp.records);
                 }
                 dispatch({ type: 'LOAD_SUCCESS', rows: allRows });
             } else {
-                const body: Record<string, unknown> = {
-                    company: companyRef.current,
-                    year: yearRef.current,
-                    partida: sel.partida,
-                };
-                if (selMonths && selMonths.length === 1) body.month = selMonths[0];
-                if (sel.filterCol && sel.filterVal != null) {
-                    body.filter_col = sel.filterCol;
-                    body.filter_val = sel.filterVal;
-                }
-                const resp = await api.post<{ records: ReportRow[] }>(API_CONFIG.ENDPOINTS.DATA_DETAIL, body);
+                const resp = await api.post<{ records: ReportRow[] }>(
+                    API_CONFIG.ENDPOINTS.DATA_DETAIL,
+                    buildBody(yearRef.current, selMonths?.[0]),
+                );
                 dispatch({ type: 'LOAD_SUCCESS', rows: resp.records });
             }
         } catch (err) {

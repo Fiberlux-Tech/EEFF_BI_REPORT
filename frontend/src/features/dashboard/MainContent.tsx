@@ -129,20 +129,24 @@ export default function MainContent() {
             const isBs = isBsView(currentView);
             const columns = isBs ? bsColumns : plColumns;
 
-            // Build tables, applying trailing merge if needed
+            // Build tables, applying trailing merge and/or IC filter
             let tables = noteConfig.tables(reportData);
 
-            if (periodRange === 'trailing12') {
-                tables = tables.map(t => {
-                    const dataKey = getDataKeyForTable(t, reportData);
-                    if (dataKey) {
-                        return { ...t, rows: isBs
-                            ? getMergedRows(dataKey, t.labelKeys[t.labelKeys.length - 1], 'bs')
-                            : getMergedDetailRows(dataKey, t.labelKeys) };
+            // Always run through getMergedDetailRows for P&L note views:
+            // it handles both trailing-12M merge AND IC filter key swapping.
+            tables = tables.map(t => {
+                const dataKey = getDataKeyForTable(t, reportData);
+                if (dataKey) {
+                    if (isBs) {
+                        if (periodRange === 'trailing12') {
+                            return { ...t, rows: getMergedRows(dataKey, t.labelKeys[t.labelKeys.length - 1], 'bs') };
+                        }
+                    } else {
+                        return { ...t, rows: getMergedDetailRows(dataKey, t.labelKeys) };
                     }
-                    return t;
-                });
-            }
+                }
+                return t;
+            });
 
             // Remember if the config defines multiple sections (for header display)
             const isMultiSection = tables.length > 1;

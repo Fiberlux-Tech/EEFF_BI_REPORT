@@ -201,40 +201,133 @@ def _clear_all_disk_cache() -> None:
             f.unlink(missing_ok=True)
 
 
+# ── IC-filtered variant helper ───────────────────────────────────────
+#
+# Produces _ex_ic / _only_ic variants of each detail table.
+# The filtered variants are reindexed to match the "all" table's row
+# structure so the frontend always sees the same rows (with zeros where
+# the filter excludes data).
+
+
+def _reindex_like(filtered: pd.DataFrame, reference: pd.DataFrame) -> pd.DataFrame:
+    """Reindex *filtered* to have the same rows as *reference*, filling gaps with 0/None.
+
+    Label columns are preserved from *reference*; numeric month columns
+    default to 0 so the table shape is identical regardless of filter.
+    """
+    if filtered.empty or reference.empty:
+        # Return reference structure with zeroed numerics
+        result = reference.copy()
+        for col in result.select_dtypes(include="number").columns:
+            result[col] = 0
+        return result
+
+    # Identify label vs numeric columns from reference
+    num_cols = list(reference.select_dtypes(include="number").columns)
+    label_cols = [c for c in reference.columns if c not in num_cols]
+
+    # Build a lookup from label values → filtered numeric values
+    if label_cols:
+        # Create composite key for matching
+        ref_keys = reference[label_cols].astype(str).apply("|".join, axis=1)
+        filt_keys = filtered[label_cols].astype(str).apply("|".join, axis=1)
+        filt_lookup = dict(zip(filt_keys, filtered.index))
+    else:
+        ref_keys = reference.index
+        filt_lookup = {}
+
+    result = reference.copy()
+    for col in num_cols:
+        result[col] = 0.0
+
+    for i, key in enumerate(ref_keys):
+        if key in filt_lookup:
+            src_idx = filt_lookup[key]
+            for col in num_cols:
+                result.at[i, col] = filtered.at[src_idx, col]
+
+    return result
+
+
+def _add_ic_variants(base: dict[str, pd.DataFrame],
+                     df_stmt: pd.DataFrame,
+                     preagg: pd.DataFrame,
+                     compute_fn) -> dict[str, pd.DataFrame]:
+    """Run *compute_fn* on IC-filtered subsets and merge results with *base*.
+
+    For each key in *base*, adds key_ex_ic and key_only_ic variants
+    reindexed to match the original row structure.
+    """
+    preagg_ex_ic = preagg[~preagg[IS_INTERCOMPANY]]
+    preagg_only_ic = preagg[preagg[IS_INTERCOMPANY]]
+
+    ex_ic_dfs = compute_fn(df_stmt[~df_stmt[IS_INTERCOMPANY]], preagg_ex_ic)
+    only_ic_dfs = compute_fn(df_stmt[df_stmt[IS_INTERCOMPANY]], preagg_only_ic)
+
+    result = dict(base)
+    for key, ref_df in base.items():
+        ex_df = ex_ic_dfs.get(key, pd.DataFrame())
+        ic_df = only_ic_dfs.get(key, pd.DataFrame())
+        result[f"{key}_ex_ic"] = _reindex_like(ex_df, ref_df)
+        result[f"{key}_only_ic"] = _reindex_like(ic_df, ref_df)
+
+    return result
+
+
 # ── P&L Section registry ──────────────────────────────────────────────
 # Maps section name → compute function that takes (df_stmt, preagg)
 # and returns {key: DataFrame}.
 
 
-def _compute_ingresos(df_stmt, preagg):
+def _compute_ingresos_base(df_stmt, preagg):
     return {
         "ingresos_ordinarios": sales_details(df_stmt, with_total_row=True, preagg=preagg),
         "ingresos_proyectos": proyectos_especiales(df_stmt, MONTH_NAMES_LIST, with_total_row=True),
     }
 
 
-def _compute_costo(df_stmt, preagg):
+def _compute_ingresos(df_stmt, preagg):
+    base = _compute_ingresos_base(df_stmt, preagg)
+    return _add_ic_variants(base, df_stmt, preagg, _compute_ingresos_base)
+
+
+def _compute_costo_base(df_stmt, preagg):
     return {
         "costo": detail_by_ceco(df_stmt, ["COSTO"], ascending=True, with_total_row=True, preagg=preagg),
         "costo_by_cuenta": detail_ceco_by_cuenta(df_stmt, ["COSTO"], preagg=preagg),
     }
 
 
-def _compute_gasto_venta(df_stmt, preagg):
+def _compute_costo(df_stmt, preagg):
+    base = _compute_costo_base(df_stmt, preagg)
+    return _add_ic_variants(base, df_stmt, preagg, _compute_costo_base)
+
+
+def _compute_gasto_venta_base(df_stmt, preagg):
     return {
         "gasto_venta": detail_by_ceco(df_stmt, ["GASTO VENTA"], ascending=True, with_total_row=True, preagg=preagg),
         "gasto_venta_by_cuenta": detail_ceco_by_cuenta(df_stmt, ["GASTO VENTA"], preagg=preagg),
     }
 
 
-def _compute_gasto_admin(df_stmt, preagg):
+def _compute_gasto_venta(df_stmt, preagg):
+    base = _compute_gasto_venta_base(df_stmt, preagg)
+    return _add_ic_variants(base, df_stmt, preagg, _compute_gasto_venta_base)
+
+
+def _compute_gasto_admin_base(df_stmt, preagg):
     return {
         "gasto_admin": detail_by_ceco(df_stmt, ["GASTO ADMIN"], ascending=True, with_total_row=True, preagg=preagg),
         "gasto_admin_by_cuenta": detail_ceco_by_cuenta(df_stmt, ["GASTO ADMIN"], preagg=preagg),
     }
 
 
-def _compute_otros_egresos(df_stmt, preagg):
+def _compute_gasto_admin(df_stmt, preagg):
+    base = _compute_gasto_admin_base(df_stmt, preagg)
+    return _add_ic_variants(base, df_stmt, preagg, _compute_gasto_admin_base)
+
+
+def _compute_otros_egresos_base(df_stmt, preagg):
     return {
         "otros_ingresos": detail_by_cuenta(df_stmt, ["OTROS INGRESOS"], with_total_row=True, preagg=preagg),
         "otros_ingresos_by_cuenta": detail_ceco_by_cuenta(df_stmt, ["OTROS INGRESOS"], preagg=preagg),
@@ -245,7 +338,12 @@ def _compute_otros_egresos(df_stmt, preagg):
     }
 
 
-def _compute_dya(df_stmt, preagg):
+def _compute_otros_egresos(df_stmt, preagg):
+    base = _compute_otros_egresos_base(df_stmt, preagg)
+    return _add_ic_variants(base, df_stmt, preagg, _compute_otros_egresos_base)
+
+
+def _compute_dya_base(df_stmt, preagg):
     return {
         "dya_costo": detail_by_ceco(df_stmt, ["D&A - COSTO"], ascending=True, with_total_row=True, preagg=preagg),
         "dya_costo_by_cuenta": detail_ceco_by_cuenta(df_stmt, ["D&A - COSTO"], preagg=preagg),
@@ -254,7 +352,12 @@ def _compute_dya(df_stmt, preagg):
     }
 
 
-def _compute_resultado_financiero(df_stmt, preagg):
+def _compute_dya(df_stmt, preagg):
+    base = _compute_dya_base(df_stmt, preagg)
+    return _add_ic_variants(base, df_stmt, preagg, _compute_dya_base)
+
+
+def _compute_resultado_financiero_base(df_stmt, preagg):
     res = detail_resultado_financiero(df_stmt, preagg=preagg)
     return {
         "resultado_financiero_ingresos": res.ingresos,
@@ -262,7 +365,12 @@ def _compute_resultado_financiero(df_stmt, preagg):
     }
 
 
-def _compute_analysis_pl_finanzas(df_stmt, preagg):
+def _compute_resultado_financiero(df_stmt, preagg):
+    base = _compute_resultado_financiero_base(df_stmt, preagg)
+    return _add_ic_variants(base, df_stmt, preagg, _compute_resultado_financiero_base)
+
+
+def _compute_analysis_pl_finanzas_base(df_stmt, preagg):
     return {
         "costo_by_cuenta": detail_ceco_by_cuenta(df_stmt, ["COSTO"], preagg=preagg),
         "gasto_venta_by_cuenta": detail_ceco_by_cuenta(df_stmt, ["GASTO VENTA"], preagg=preagg),
@@ -274,6 +382,11 @@ def _compute_analysis_pl_finanzas(df_stmt, preagg):
         "participacion_by_cuenta": detail_ceco_by_cuenta(df_stmt, ["PARTICIPACION DE TRABAJADORES"], preagg=preagg),
         "provision_by_cuenta": detail_ceco_by_cuenta(df_stmt, ["PROVISION INCOBRABLE"], preagg=preagg),
     }
+
+
+def _compute_analysis_pl_finanzas(df_stmt, preagg):
+    base = _compute_analysis_pl_finanzas_base(df_stmt, preagg)
+    return _add_ic_variants(base, df_stmt, preagg, _compute_analysis_pl_finanzas_base)
 
 
 def _compute_analysis_planilla(df_stmt, preagg):
@@ -758,12 +871,16 @@ _MONTH_NAME_TO_NUM = {v: k for k, v in MONTH_NAMES.items()}
 def get_detail_records(
     company: str, year: int, partida: str, month: str | None = None,
     filter_col: str | None = None, filter_val: str | None = None,
+    ic_filter: str = "all",
 ) -> list[dict]:
     """Return raw journal entries matching the given partida + optional month/filter.
 
     If month is None, returns records for all months (full period).
     If the data hasn't been loaded yet, triggers a load first.
     Checks P&L data first; if no match, falls back to BS data.
+
+    ic_filter: "all" (default), "ex_ic" (exclude intercompany),
+               "only_ic" (only intercompany rows).
     """
     # Try P&L first
     df = _caches["df"].get(company, year)
@@ -798,6 +915,12 @@ def get_detail_records(
         if filter_col not in _FILTERABLE_COLUMNS:
             return []
         mask = mask & (df[filter_col].astype(str) == filter_val)
+
+    # Apply intercompany filter
+    if ic_filter == "ex_ic" and IS_INTERCOMPANY in df.columns:
+        mask = mask & (~df[IS_INTERCOMPANY])
+    elif ic_filter == "only_ic" and IS_INTERCOMPANY in df.columns:
+        mask = mask & (df[IS_INTERCOMPANY])
 
     result = df.loc[mask, _DETAIL_COLUMNS].copy()
     result[FECHA] = result[FECHA].dt.strftime("%Y-%m-%d")

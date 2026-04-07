@@ -484,12 +484,24 @@ export function ReportProvider({ children }: { children: React.ReactNode }) {
     const getMergedDetailRows = useCallback(
         (key: keyof ReportData, labelKeys: string[]): ReportRow[] => {
             if (!state.reportData) return [];
-            const currentRows = (state.reportData[key] as ReportRow[] | undefined) ?? [];
+
+            // Apply IC filter: swap key suffix for ex_ic / only_ic.
+            // "expanded" falls back to "all" (no suffix) in detail views.
+            let effectiveKey = key;
+            if (state.intercompanyFilter === 'ex_ic') {
+                const icKey = `${String(key)}_ex_ic` as keyof ReportData;
+                if (icKey in state.reportData) effectiveKey = icKey;
+            } else if (state.intercompanyFilter === 'only_ic') {
+                const icKey = `${String(key)}_only_ic` as keyof ReportData;
+                if (icKey in state.reportData) effectiveKey = icKey;
+            }
+
+            const currentRows = (state.reportData[effectiveKey] as ReportRow[] | undefined) ?? [];
             if (state.periodRange === 'ytd') return currentRows;
-            const prevRows = (state.prevYearData?.[key] as ReportRow[] | undefined) ?? [];
+            const prevRows = (state.prevYearData?.[effectiveKey] as ReportRow[] | undefined) ?? [];
             return mergeTrailingDetailRows(currentRows, prevRows, labelKeys, trailingMonthSources, state.selectedYear);
         },
-        [state.reportData, state.prevYearData, state.periodRange, trailingMonthSources, state.selectedYear],
+        [state.reportData, state.prevYearData, state.periodRange, trailingMonthSources, state.selectedYear, state.intercompanyFilter],
     );
 
     return (
