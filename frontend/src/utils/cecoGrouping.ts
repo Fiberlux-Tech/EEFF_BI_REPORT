@@ -83,7 +83,7 @@ export function buildCecoGroups(cuentaRows: ReportRow[], columns: DisplayColumn[
     const byCeco = new Map<string, { desc: string; rows: ReportRow[] }>();
     for (const row of cuentaRows) {
         const cc = String(row['CENTRO_COSTO'] ?? '');
-        if (!cc) continue;
+        if (!cc || cc === 'TOTAL') continue;
         if (!byCeco.has(cc)) byCeco.set(cc, { desc: String(row['DESC_CECO'] ?? ''), rows: [] });
         byCeco.get(cc)!.rows.push(row);
     }
