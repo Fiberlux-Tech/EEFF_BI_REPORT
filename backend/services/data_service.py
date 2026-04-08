@@ -396,6 +396,7 @@ def _compute_analysis_pl_finanzas(df_stmt, preagg):
 def _compute_analysis_planilla(df_stmt, preagg):
     return {
         "planilla_by_cuenta": detail_planilla(df_stmt, preagg=preagg),
+        "revenue_by_cuenta": sales_details(df_stmt, preagg=preagg),
     }
 
 

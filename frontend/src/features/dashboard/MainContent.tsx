@@ -30,7 +30,7 @@ export default function MainContent() {
         reportData, currentView, isLoading, error,
         getDisplayColumns, periodRange, getMergedRows, getMergedDetailRows,
         isBsLoading, bsError, selectedCompany, selectedYear,
-        trailingMonthSources, loadedSections, isSectionLoading,
+        trailingMonthSources, loadedSections,
         proveedoresCeco,
     } = useReport();
 
@@ -189,11 +189,13 @@ export default function MainContent() {
             const planillaRows = getMergedDetailRows('planilla_by_cuenta', planillaKeys);
             const plSummaryRows = getMergedRows('pl_summary', 'PARTIDA_PL', 'pl');
             const revenueRow = plSummaryRows.find(r => r['PARTIDA_PL'] === 'INGRESOS ORDINARIOS') ?? null;
+            const revenueByCuenta = getMergedDetailRows('revenue_by_cuenta', ['CUENTA_CONTABLE', 'DESCRIPCION']);
             return (
                 <PlanillaTable
                     rows={planillaRows}
                     columns={plColumns}
                     revenueRow={revenueRow}
+                    revenueByCuenta={revenueByCuenta}
                     headcountMap={headcountMap}
                     selectedYear={selectedYear}
                     monthSources={periodRange === 'trailing12' ? trailingMonthSources : null}

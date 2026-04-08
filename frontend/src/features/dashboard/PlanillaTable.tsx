@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import type { ReportRow, DisplayColumn, MonthSource, Month } from '@/types';
 import { ALL_MONTHS } from '@/types';
 import type { HeadcountMap } from '@/features/dashboard/useHeadcount';
@@ -436,6 +436,7 @@ interface PlanillaTableProps {
     rows: ReportRow[];
     columns: DisplayColumn[];
     revenueRow: ReportRow | null;
+    revenueByCuenta: ReportRow[];
     headcountMap?: HeadcountMap | null;
     selectedYear: number;
     /** MonthSource[] for trailing 12M, null for YTD */
@@ -443,7 +444,7 @@ interface PlanillaTableProps {
     company: string;
 }
 
-export default function PlanillaTable({ rows, columns, revenueRow, headcountMap, selectedYear, monthSources, company }: PlanillaTableProps) {
+export default function PlanillaTable({ rows, columns, revenueRow, revenueByCuenta, headcountMap, selectedYear, monthSources, company }: PlanillaTableProps) {
     const [expandedPartidas, setExpandedPartidas] = useState<Set<string>>(new Set());
     const [expandedCecos, setExpandedCecos] = useState<Set<string>>(new Set());
     const [expandedPctPartidas, setExpandedPctPartidas] = useState<Set<string>>(new Set());
@@ -454,6 +455,21 @@ export default function PlanillaTable({ rows, columns, revenueRow, headcountMap,
     const [rosterModal, setRosterModal] = useState<RosterModalState | null>(null);
     const [rosterEmployees, setRosterEmployees] = useState<{ empleado: string; nombre: string }[]>([]);
     const [rosterLoading, setRosterLoading] = useState(false);
+    const [excludedCuentas, setExcludedCuentas] = useState<Set<string>>(new Set());
+    const [revenueFilterOpen, setRevenueFilterOpen] = useState(false);
+    const revenueFilterRef = useRef<HTMLDivElement>(null);
+
+    // Close revenue filter dropdown on click outside
+    useEffect(() => {
+        if (!revenueFilterOpen) return;
+        const handler = (e: MouseEvent) => {
+            if (revenueFilterRef.current && !revenueFilterRef.current.contains(e.target as Node)) {
+                setRevenueFilterOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [revenueFilterOpen]);
 
     const openRoster = useCallback((cecoCode: string, cecoDesc: string, yearMonth: string) => {
         setRosterModal({ cecoCode, cecoDesc, yearMonth });
@@ -474,6 +490,50 @@ export default function PlanillaTable({ rows, columns, revenueRow, headcountMap,
             setRosterLoading(false);
         });
     }, [rosterModal, company]);
+
+    // ── Revenue cuenta filter ──────────────────────────────────────────
+    const revenueCuentas = useMemo(() => {
+        const list: { cuenta: string; desc: string }[] = [];
+        const seen = new Set<string>();
+        for (const row of revenueByCuenta) {
+            const cuenta = String(row['CUENTA_CONTABLE'] ?? '');
+            if (!cuenta || seen.has(cuenta)) continue;
+            seen.add(cuenta);
+            list.push({ cuenta, desc: String(row['DESCRIPCION'] ?? '') });
+        }
+        list.sort((a, b) => a.cuenta.localeCompare(b.cuenta));
+        return list;
+    }, [revenueByCuenta]);
+
+    const adjustedRevenueRow = useMemo<ReportRow | null>(() => {
+        if (!revenueRow) return null;
+        if (excludedCuentas.size === 0) return revenueRow;
+        // Sum only non-excluded cuenta rows to build a synthetic revenue row
+        const included = revenueByCuenta.filter(
+            r => !excludedCuentas.has(String(r['CUENTA_CONTABLE'] ?? ''))
+        );
+        if (included.length === 0) return null;
+        const synth: ReportRow = { PARTIDA_PL: 'INGRESOS ORDINARIOS' };
+        for (const row of included) {
+            for (const key of Object.keys(row)) {
+                if (key === 'CUENTA_CONTABLE' || key === 'DESCRIPCION') continue;
+                const val = row[key] as number | null;
+                if (val != null && typeof val === 'number') {
+                    synth[key] = ((synth[key] as number) ?? 0) + val;
+                }
+            }
+        }
+        return synth;
+    }, [revenueRow, revenueByCuenta, excludedCuentas]);
+
+    const toggleCuentaExclusion = useCallback((cuenta: string) => {
+        setExcludedCuentas(prev => {
+            const next = new Set(prev);
+            if (next.has(cuenta)) next.delete(cuenta);
+            else next.add(cuenta);
+            return next;
+        });
+    }, []);
 
     const filteredRows = useMemo(() => {
         if (planillaFilter === 'all') return rows;
@@ -510,13 +570,13 @@ export default function PlanillaTable({ rows, columns, revenueRow, headcountMap,
 
     const activeHeaders = useMemo(() => {
         const s = new Set<string>();
-        if (!revenueRow) return s;
+        if (!adjustedRevenueRow) return s;
         for (const col of columns) {
-            const val = getCellValue(revenueRow, col);
+            const val = getCellValue(adjustedRevenueRow, col);
             if (val !== null && val !== undefined && val !== 0) s.add(col.header);
         }
         return s;
-    }, [revenueRow, columns]);
+    }, [adjustedRevenueRow, columns]);
 
     const togglePartida = (name: string) => {
         setExpandedPartidas(prev => {
@@ -584,7 +644,7 @@ export default function PlanillaTable({ rows, columns, revenueRow, headcountMap,
     // Primary metric requires HC data for headcount/salario — fall back to gasto
     const effectivePrimary = (!hasHeadcount && primaryMetric !== 'gasto') ? 'gasto' : primaryMetric;
 
-    const revTotal = (revenueRow?.['TOTAL'] as number | null) ?? null;
+    const revTotal = (adjustedRevenueRow?.['TOTAL'] as number | null) ?? null;
 
     /** Render an HC value as a clickable link (CECO-level only, when we know the exact month). */
     const renderHcLink = (hc: number | null, cecoCode: string, cecoDesc: string, col: DisplayColumn): React.ReactNode => {
@@ -729,17 +789,69 @@ export default function PlanillaTable({ rows, columns, revenueRow, headcountMap,
         <div>
             {/* ── Filter Bar ── */}
             <nav className="flex items-center justify-between mb-10">
-                <div className="flex items-center gap-3">
-                    <span className="filter-label !mb-0">Tipo</span>
-                    <select
-                        value={planillaFilter}
-                        onChange={e => setPlanillaFilter(e.target.value as PlanillaFilter)}
-                        className="select-base"
-                    >
-                        {FILTER_OPTIONS.map(opt => (
-                            <option key={opt.value} value={opt.value}>{opt.label}</option>
-                        ))}
-                    </select>
+                <div className="flex items-center gap-6">
+                    <div className="flex items-center gap-3">
+                        <span className="filter-label !mb-0">Tipo</span>
+                        <select
+                            value={planillaFilter}
+                            onChange={e => setPlanillaFilter(e.target.value as PlanillaFilter)}
+                            className="select-base"
+                        >
+                            {FILTER_OPTIONS.map(opt => (
+                                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Revenue cuenta exclusion filter */}
+                    {revenueCuentas.length > 0 && (
+                        <div ref={revenueFilterRef} className="relative flex items-center gap-3">
+                            <span className="filter-label !mb-0">Ingresos</span>
+                            <button
+                                onClick={() => setRevenueFilterOpen(prev => !prev)}
+                                className="select-base text-left flex items-center gap-2"
+                            >
+                                <span>
+                                    {excludedCuentas.size === 0
+                                        ? 'Todas las cuentas'
+                                        : `${revenueCuentas.length - excludedCuentas.size}/${revenueCuentas.length} cuentas`}
+                                </span>
+                                <span className="text-xs">{revenueFilterOpen ? '\u25B4' : '\u25BE'}</span>
+                            </button>
+                            {revenueFilterOpen && (
+                                <div
+                                    className="absolute top-full left-0 mt-1 z-50 bg-surface border border-border-light rounded-md shadow-lg py-1 max-h-72 overflow-y-auto"
+                                    style={{ minWidth: '380px' }}
+                                >
+                                    {revenueCuentas.map(({ cuenta, desc }) => (
+                                        <label
+                                            key={cuenta}
+                                            className="flex items-center gap-2 px-3 py-1.5 hover:bg-surface-hover cursor-pointer text-sm"
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                checked={!excludedCuentas.has(cuenta)}
+                                                onChange={() => toggleCuentaExclusion(cuenta)}
+                                                className="rounded"
+                                            />
+                                            <span className="font-mono text-xs text-txt-muted">{cuenta}</span>
+                                            <span>{desc}</span>
+                                        </label>
+                                    ))}
+                                    {excludedCuentas.size > 0 && (
+                                        <div className="border-t border-border-light px-3 py-1.5">
+                                            <button
+                                                onClick={() => setExcludedCuentas(new Set())}
+                                                className="text-xs text-accent hover:underline"
+                                            >
+                                                Restaurar todas
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
                 <div className="flex items-center gap-4">
                     <div className="flex items-center gap-2">
@@ -787,20 +899,27 @@ export default function PlanillaTable({ rows, columns, revenueRow, headcountMap,
                 }
                 <tbody>
                     {/* Revenue row — always shows gasto regardless of primary metric */}
-                    {revenueRow && (
+                    {adjustedRevenueRow && (
                         <>
                             <tr className="rpt-row-highlight">
-                                <td className="rpt-sticky">Ingresos Ordinarios</td>
+                                <td className="rpt-sticky">
+                                    Ingresos Ordinarios
+                                    {excludedCuentas.size > 0 && (
+                                        <span className="text-xs text-txt-muted ml-1">
+                                            ({revenueCuentas.length - excludedCuentas.size}/{revenueCuentas.length} cuentas)
+                                        </span>
+                                    )}
+                                </td>
                                 {isDual ? (
                                     <>
-                                        <NumCellsDual row={revenueRow} columns={columns} activeHeaders={activeHeaders} getMetric={() => ''} />
-                                        <TotalCell val={revenueRow['TOTAL'] as number | null} />
+                                        <NumCellsDual row={adjustedRevenueRow} columns={columns} activeHeaders={activeHeaders} getMetric={() => ''} />
+                                        <TotalCell val={adjustedRevenueRow['TOTAL'] as number | null} />
                                         <td className="rpt-col-metric"></td>
                                     </>
                                 ) : (
                                     <>
-                                        <NumCells row={revenueRow} columns={columns} activeHeaders={activeHeaders} />
-                                        <TotalCell val={revenueRow['TOTAL'] as number | null} />
+                                        <NumCells row={adjustedRevenueRow} columns={columns} activeHeaders={activeHeaders} />
+                                        <TotalCell val={adjustedRevenueRow['TOTAL'] as number | null} />
                                     </>
                                 )}
                             </tr>
@@ -953,7 +1072,7 @@ export default function PlanillaTable({ rows, columns, revenueRow, headcountMap,
             </div>
 
             {/* ═══ TABLE 2: % DE INGRESOS (L0 → L1 → L2) ═══ */}
-            {revenueRow && (
+            {adjustedRevenueRow && (
                 <>
                     <div className="rpt-separator">
                         <div className="sep-line"></div>
@@ -975,7 +1094,7 @@ export default function PlanillaTable({ rows, columns, revenueRow, headcountMap,
                                                 <span className="rpt-chevron">{isPctExpanded ? '\u25BE' : '\u25B8'}</span>
                                                 {partida.name}
                                             </td>
-                                            <NumCellsPct row={partida.totals as ReportRow} revenueRow={revenueRow} columns={columns} activeHeaders={activeHeaders} />
+                                            <NumCellsPct row={partida.totals as ReportRow} revenueRow={adjustedRevenueRow} columns={columns} activeHeaders={activeHeaders} />
                                             <TotalCellPct costVal={partida.totals['TOTAL'] ?? null} revenueVal={revTotal} />
                                         </tr>
 
@@ -990,7 +1109,7 @@ export default function PlanillaTable({ rows, columns, revenueRow, headcountMap,
                                                             <span className="rpt-chevron">{isCecoExpanded ? '\u25BE' : '\u25B8'}</span>
                                                             {ceco.code} {ceco.desc}
                                                         </td>
-                                                        <NumCellsPct row={ceco.totals as ReportRow} revenueRow={revenueRow} columns={columns} activeHeaders={activeHeaders} />
+                                                        <NumCellsPct row={ceco.totals as ReportRow} revenueRow={adjustedRevenueRow} columns={columns} activeHeaders={activeHeaders} />
                                                         <TotalCellPct costVal={ceco.totals['TOTAL'] ?? null} revenueVal={revTotal} />
                                                     </tr>
 
@@ -999,7 +1118,7 @@ export default function PlanillaTable({ rows, columns, revenueRow, headcountMap,
                                                             <td className="rpt-sticky">
                                                                 {cuenta.row['CUENTA_CONTABLE']} {cuenta.row['DESCRIPCION']}
                                                             </td>
-                                                            <NumCellsPct row={cuenta.row} revenueRow={revenueRow} columns={columns} activeHeaders={activeHeaders} />
+                                                            <NumCellsPct row={cuenta.row} revenueRow={adjustedRevenueRow} columns={columns} activeHeaders={activeHeaders} />
                                                             <TotalCellPct costVal={cuenta.row['TOTAL'] as number | null} revenueVal={revTotal} />
                                                         </tr>
                                                     ))}
@@ -1017,7 +1136,7 @@ export default function PlanillaTable({ rows, columns, revenueRow, headcountMap,
                                     <span className="rpt-chevron" style={{ visibility: 'hidden' }}>{'\u25B8'}</span>
                                     TOTAL
                                 </td>
-                                <NumCellsPct row={grandTotals as ReportRow} revenueRow={revenueRow} columns={columns} activeHeaders={activeHeaders} />
+                                <NumCellsPct row={grandTotals as ReportRow} revenueRow={adjustedRevenueRow} columns={columns} activeHeaders={activeHeaders} />
                                 <TotalCellPct costVal={grandTotals['TOTAL'] ?? null} revenueVal={revTotal} />
                             </tr>
 
