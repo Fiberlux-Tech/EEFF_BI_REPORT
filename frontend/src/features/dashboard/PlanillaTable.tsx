@@ -513,8 +513,10 @@ export default function PlanillaTable({ rows, columns, revenueRow, revenueByCuen
 
     const adjustedRevenueRow = useMemo<ReportRow | null>(() => {
         if (!revenueRow) return null;
-        if (excludedCuentas.size === 0) return revenueRow;
-        // Sum only non-excluded cuenta rows to build a synthetic revenue row
+        // When no cuenta-level data available, fall back to pl_summary row
+        if (revenueDataRows.length === 0) return revenueRow;
+        // Always build from individual cuenta rows so the denominator stays
+        // consistent whether or not cuentas are excluded.
         const included = revenueDataRows.filter(
             r => !excludedCuentas.has(String(r['CUENTA_CONTABLE'] ?? ''))
         );
