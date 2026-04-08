@@ -31,6 +31,7 @@ export default function MainContent() {
         getDisplayColumns, periodRange, getMergedRows, getMergedDetailRows,
         isBsLoading, bsError, selectedCompany, selectedYear,
         trailingMonthSources, loadedSections, isSectionLoading,
+        proveedoresCeco,
     } = useReport();
 
     const { headcount: headcountMap } = useHeadcount(selectedCompany, selectedYear, periodRange);
@@ -204,7 +205,9 @@ export default function MainContent() {
         if (currentView === 'analysis_proveedores') {
             const proveedoresKeys = ['NIT', 'RAZON_SOCIAL'];
             const proveedoresRows = getMergedDetailRows('proveedores_transporte', proveedoresKeys) ?? [];
-            return <ProveedoresTable rows={proveedoresRows} columns={plColumns} />;
+            const cecos = reportData.proveedores_cecos as { ceco: string; label: string }[] | undefined;
+            const cecoLabel = cecos?.find(c => c.ceco === proveedoresCeco)?.label ?? proveedoresCeco;
+            return <ProveedoresTable rows={proveedoresRows} columns={plColumns} cecoLabel={cecoLabel} />;
         }
 
         if (currentView === 'pl') {

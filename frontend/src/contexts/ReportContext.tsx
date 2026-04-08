@@ -48,6 +48,8 @@ interface ReportState {
     intercompanyFilter: 'all' | 'only_ic' | 'ex_ic' | 'expanded';
     /** Track which P&L detail sections have been loaded */
     loadedSections: Set<string>;
+    /** Selected CECO for Analisis de Proveedores */
+    proveedoresCeco: string;
     /** Whether a section is currently being fetched */
     isSectionLoading: boolean;
     sectionError: string | null;
@@ -73,7 +75,8 @@ type ReportAction =
     | { type: 'EXPORT_ERROR'; error: string }
     | { type: 'SECTION_LOAD_START' }
     | { type: 'SECTION_LOAD_SUCCESS'; section: string; data: PLSectionData; prevData: PLSectionData | null }
-    | { type: 'SECTION_LOAD_ERROR'; error: string };
+    | { type: 'SECTION_LOAD_ERROR'; error: string }
+    | { type: 'SET_PROVEEDORES_CECO'; ceco: string };
 
 const initialState: ReportState = {
     companies: {},
@@ -94,6 +97,7 @@ const initialState: ReportState = {
     loadedSections: new Set<string>(),
     isSectionLoading: false,
     sectionError: null,
+    proveedoresCeco: '100.113.01',
 };
 
 function reportReducer(state: ReportState, action: ReportAction): ReportState {
@@ -187,6 +191,12 @@ function reportReducer(state: ReportState, action: ReportAction): ReportState {
         }
         case 'SECTION_LOAD_ERROR':
             return { ...state, isSectionLoading: false, sectionError: action.error };
+        case 'SET_PROVEEDORES_CECO': {
+            // Remove the proveedores section from loaded so it refetches with the new ceco
+            const sections = new Set(state.loadedSections);
+            sections.delete('analysis_proveedores');
+            return { ...state, proveedoresCeco: action.ceco, loadedSections: sections };
+        }
     }
 }
 
@@ -223,6 +233,9 @@ interface IReportContext {
     loadedSections: Set<string>;
     /** Computed display columns for current granularity/range/variant */
     getDisplayColumns: (variant: 'pl' | 'bs') => DisplayColumn[];
+    /** Selected CECO for Analisis de Proveedores */
+    proveedoresCeco: string;
+    setProveedoresCeco: (ceco: string) => void;
     /** Trailing 12M month sources (for drill-down year resolution) */
     trailingMonthSources: MonthSource[];
     /** Get merged rows for trailing 12M mode */
@@ -357,6 +370,8 @@ export function ReportProvider({ children }: { children: React.ReactNode }) {
     companyRef.current = state.selectedCompany;
     yearRef.current = state.selectedYear;
     periodRef.current = state.periodRange;
+    const proveedoresCecoRef = useRef(state.proveedoresCeco);
+    proveedoresCecoRef.current = state.proveedoresCeco;
 
     const fetchSection = useCallback(async (section: string) => {
         const company = companyRef.current;
@@ -369,16 +384,22 @@ export function ReportProvider({ children }: { children: React.ReactNode }) {
         const controller = new AbortController();
         sectionAbortRef.current = controller;
 
+        // Build extra params for specific sections
+        const extra: Record<string, string> = {};
+        if (section === 'analysis_proveedores') {
+            extra.ceco = proveedoresCecoRef.current;
+        }
+
         dispatch({ type: 'SECTION_LOAD_START' });
         try {
             const dataPromise = api.post<PLSectionData>(API_CONFIG.ENDPOINTS.DATA_LOAD_PL_SECTION, {
-                company, year, section,
+                company, year, section, ...extra,
             }, { signal: controller.signal });
 
             let prevDataPromise: Promise<PLSectionData> | null = null;
             if (period === 'trailing12') {
                 prevDataPromise = api.post<PLSectionData>(API_CONFIG.ENDPOINTS.DATA_LOAD_PL_SECTION, {
-                    company, year: year - 1, section,
+                    company, year: year - 1, section, ...extra,
                 }, { signal: controller.signal });
             }
 
@@ -393,6 +414,7 @@ export function ReportProvider({ children }: { children: React.ReactNode }) {
     }, []);
 
     // Trigger section fetch when user navigates to a P&L detail view
+    // Also refetch proveedores when the selected CECO changes
     useEffect(() => {
         const section = VIEW_TO_SECTION[state.currentView];
         if (
@@ -402,7 +424,7 @@ export function ReportProvider({ children }: { children: React.ReactNode }) {
         ) {
             fetchSection(section);
         }
-    }, [state.currentView, state.reportData, state.loadedSections, fetchSection]);
+    }, [state.currentView, state.reportData, state.loadedSections, state.proveedoresCeco, fetchSection]);
 
     const exportFile = useCallback(async (type: 'excel' | 'pdf' | 'all') => {
         if (!state.selectedCompany) return;
@@ -517,6 +539,8 @@ export function ReportProvider({ children }: { children: React.ReactNode }) {
             setPeriodRange: (r) => dispatch({ type: 'SET_PERIOD_RANGE', periodRange: r }),
             intercompanyFilter: state.intercompanyFilter,
             setIntercompanyFilter: (v) => dispatch({ type: 'SET_INTERCOMPANY_FILTER', filter: v }),
+            proveedoresCeco: state.proveedoresCeco,
+            setProveedoresCeco: (ceco) => dispatch({ type: 'SET_PROVEEDORES_CECO', ceco }),
             reportData: state.reportData,
             prevYearData: state.prevYearData,
             currentView: state.currentView,

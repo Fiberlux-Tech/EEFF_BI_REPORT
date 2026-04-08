@@ -150,6 +150,8 @@ export default function TopBar() {
         loadData, isLoading,
         periodRange,
         trailingMonthSources,
+        proveedoresCeco, setProveedoresCeco,
+        reportData,
     } = useReport();
 
     const { handleExport, canExport } = useViewExport();
@@ -194,6 +196,23 @@ export default function TopBar() {
 
                     {/* Display settings dropdown */}
                     <DisplayDropdown />
+
+                    {/* CECO selector — only for Analisis de Proveedores */}
+                    {currentView === 'analysis_proveedores' && (
+                        <select
+                            value={proveedoresCeco}
+                            onChange={e => setProveedoresCeco(e.target.value)}
+                            className="select-base"
+                        >
+                            {(reportData?.proveedores_cecos as { ceco: string; label: string }[] ?? []).map(item => (
+                                <option key={item.ceco} value={item.ceco}>{item.label}</option>
+                            ))}
+                            {/* Fallback if cecos not loaded yet */}
+                            {!reportData?.proveedores_cecos && (
+                                <option value={proveedoresCeco}>{proveedoresCeco}</option>
+                            )}
+                        </select>
+                    )}
 
                     {/* Intercompany filter — P&L views only */}
                     {!isBsView(currentView) && (

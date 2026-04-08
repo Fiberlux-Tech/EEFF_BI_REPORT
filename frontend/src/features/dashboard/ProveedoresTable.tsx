@@ -9,11 +9,12 @@ import { negClass } from '@/utils/classHelpers';
 interface ProveedoresTableProps {
     rows: ReportRow[];
     columns: DisplayColumn[];
+    cecoLabel?: string;
 }
 
 // ── Component ───────────────────────────────────────────────────────
 
-export default function ProveedoresTable({ rows, columns }: ProveedoresTableProps) {
+export default function ProveedoresTable({ rows, columns, cecoLabel }: ProveedoresTableProps) {
     const { totalRow, detailRows } = useMemo(() => {
         const total = rows.find(r => r['RAZON_SOCIAL'] === 'TOTAL') ?? null;
         const detail = rows.filter(r => r['RAZON_SOCIAL'] !== 'TOTAL');
@@ -23,7 +24,7 @@ export default function ProveedoresTable({ rows, columns }: ProveedoresTableProp
     if (!totalRow && detailRows.length === 0) {
         return (
             <div className="text-center py-16 text-txt-muted">
-                <p className="text-sm">Sin datos de proveedores de transporte</p>
+                <p className="text-sm">Sin datos de proveedores para {cecoLabel ?? 'este centro de costo'}</p>
             </div>
         );
     }
@@ -52,7 +53,7 @@ export default function ProveedoresTable({ rows, columns }: ProveedoresTableProp
                 {/* Total row at top */}
                 {totalRow && (
                     <tr className="rpt-row-total">
-                        <td className="rpt-sticky" style={provColStyle}>COSTO DE TRANSPORTE</td>
+                        <td className="rpt-sticky" style={provColStyle}>{cecoLabel ?? 'COSTO DE TRANSPORTE'}</td>
                         {columns.map(col => {
                             const val = getCellValue(totalRow, col);
                             return (

@@ -123,10 +123,22 @@ def detail_planilla(df: pd.DataFrame,
 
 CECO_TRANSPORTE = "100.113.01"
 
+ALLOWED_PROVEEDORES_CECOS = [
+    "100.113.01",
+    "100.115.01",
+    "100.112.01",
+    "100.107.01",
+    "100.114.01",
+    "100.117.01",
+    "100.118.01",
+]
 
-def detail_proveedores_transporte(df: pd.DataFrame) -> pd.DataFrame:
-    """Pivot COSTO DE TRANSPORTE (CECO 100.113.01) by NIT + RAZON_SOCIAL x month."""
-    filtered = df[df[CENTRO_COSTO] == CECO_TRANSPORTE]
+
+def detail_proveedores_by_ceco(df: pd.DataFrame, ceco: str = CECO_TRANSPORTE) -> pd.DataFrame:
+    """Pivot a specific CENTRO_COSTO by NIT + RAZON_SOCIAL x month."""
+    if ceco not in ALLOWED_PROVEEDORES_CECOS:
+        raise ValueError(f"CECO {ceco!r} not in allowed list")
+    filtered = df[df[CENTRO_COSTO] == ceco]
     if filtered.empty:
         return pd.DataFrame()
     filtered = filtered.copy()
@@ -136,6 +148,11 @@ def detail_proveedores_transporte(df: pd.DataFrame) -> pd.DataFrame:
     pivot = pivot.sort_values(TOTAL_COL, ascending=False).reset_index(drop=True)
     pivot = append_total_row(pivot, RAZON_SOCIAL)
     return pivot
+
+
+def detail_proveedores_transporte(df: pd.DataFrame) -> pd.DataFrame:
+    """Pivot COSTO DE TRANSPORTE (CECO 100.113.01) by NIT + RAZON_SOCIAL x month."""
+    return detail_proveedores_by_ceco(df, CECO_TRANSPORTE)
 
 
 def split_resultado_financiero(res_fin_df: pd.DataFrame, sort_col: str = TOTAL_COL,

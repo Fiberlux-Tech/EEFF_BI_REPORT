@@ -107,6 +107,7 @@ export interface ReportData {
   provision_by_cuenta_only_ic?: ReportRow[];
   planilla_by_cuenta?: ReportRow[];
   proveedores_transporte?: ReportRow[];
+  proveedores_cecos?: ReportRow[];
   // BS note detail tables (lazy-loaded via /api/data/load-bs)
   bs_efectivo?: ReportRow[];
   bs_cxc_comerciales?: ReportRow[];

@@ -160,6 +160,7 @@ def load_pl_section_route(body, company, year):
     """Compute a specific P&L detail section on demand.
 
     Body: { "company": "FIBERLUX", "year": 2026, "section": "ingresos" }
+    Optional for analysis_proveedores: { "ceco": "100.113.01" }
     """
     section = (body.get('section') or '').strip()
     if not section or section not in VALID_PL_SECTIONS:
@@ -167,8 +168,20 @@ def load_pl_section_route(body, company, year):
             f'Seccion invalida: {section!r}. Validas: {sorted(VALID_PL_SECTIONS)}')
 
     force_refresh = body.get('force_refresh', False)
+
+    # Extra params for specific sections
+    extra = {}
+    if section == 'analysis_proveedores':
+        ceco = (body.get('ceco') or '').strip()
+        if ceco:
+            from accounting.aggregation import ALLOWED_PROVEEDORES_CECOS
+            if ceco not in ALLOWED_PROVEEDORES_CECOS:
+                raise RequestValidationError(
+                    f'CECO invalido: {ceco!r}. Validos: {ALLOWED_PROVEEDORES_CECOS}')
+            extra['ceco'] = ceco
+
     t0 = time.perf_counter()
-    data = load_pl_section(company, year, section, force_refresh=force_refresh)
+    data = load_pl_section(company, year, section, force_refresh=force_refresh, **extra)
     result = {**data, '_timing_ms': round((time.perf_counter() - t0) * 1000)}
     return ok(result)
 

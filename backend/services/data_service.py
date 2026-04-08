@@ -27,7 +27,7 @@ from accounting.aggregation import (
     proyectos_especiales,
     detail_by_ceco, detail_by_cuenta, detail_ceco_by_cuenta,
     detail_resultado_financiero, detail_planilla,
-    detail_proveedores_transporte,
+    detail_proveedores_by_ceco, ALLOWED_PROVEEDORES_CECOS,
     bs_detail_by_cuenta, bs_top20_by_nit, append_total_row,
 )
 from accounting.statements import pl_summary, bs_summary
@@ -399,9 +399,18 @@ def _compute_analysis_planilla(df_stmt, preagg):
     }
 
 
-def _compute_analysis_proveedores(df_stmt, preagg):
+def _compute_analysis_proveedores(df_stmt, preagg, *, ceco: str = "100.113.01"):
+    from config.fields import CENTRO_COSTO, DESC_CECO
+    # Build list of available CECOs with their descriptions from the data
+    ceco_labels = []
+    for code in ALLOWED_PROVEEDORES_CECOS:
+        rows = df_stmt[df_stmt[CENTRO_COSTO] == code]
+        desc = rows[DESC_CECO].dropna().unique()
+        label = str(desc[0]) if len(desc) > 0 else code
+        ceco_labels.append({"ceco": code, "label": label})
     return {
-        "proveedores_transporte": detail_proveedores_transporte(df_stmt),
+        "proveedores_transporte": detail_proveedores_by_ceco(df_stmt, ceco),
+        "proveedores_cecos": pd.DataFrame(ceco_labels),
     }
 
 
@@ -422,12 +431,15 @@ VALID_PL_SECTIONS = frozenset(SECTION_REGISTRY.keys())
 
 
 def compute_pl_section(df_stmt: pd.DataFrame, preagg: pd.DataFrame,
-                       section_name: str) -> dict[str, pd.DataFrame]:
+                       section_name: str, **kwargs) -> dict[str, pd.DataFrame]:
     """Compute a specific P&L detail section from prepared data.
 
     Returns {key: DataFrame} for the section's tables.
+    Extra kwargs are forwarded only to sections that accept them (e.g. analysis_proveedores).
     """
     compute_fn = SECTION_REGISTRY[section_name]
+    if kwargs:
+        return compute_fn(df_stmt, preagg, **kwargs)
     return compute_fn(df_stmt, preagg)
 
 
@@ -677,22 +689,26 @@ def load_pl_data(company: str, year: int, *, force_refresh: bool = False) -> dic
 
 
 def load_pl_section(company: str, year: int, section: str,
-                    *, force_refresh: bool = False) -> dict:
+                    *, force_refresh: bool = False, **kwargs) -> dict:
     """Compute a specific P&L detail section from cached df_stmt.
 
     Returns a dict of {key: list[dict]} for the section's tables.
+    Extra kwargs (e.g. ceco) are forwarded to the section's compute function.
     """
     if company not in VALID_COMPANIES:
         raise ValueError(f"Unknown company: {company!r}")
     if section not in SECTION_REGISTRY:
         raise ValueError(f"Unknown section: {section!r}")
 
+    # Cache key includes extra params so different ceco values are cached separately
+    cache_key = section if not kwargs else f"{section}:{','.join(f'{k}={v}' for k, v in sorted(kwargs.items()))}"
+
     # Check section result cache
     if not force_refresh:
         cached_sections = _caches["pl_sections"].get(company, year)
-        if cached_sections and section in cached_sections:
-            logger.info("Serving cached section '%s' for %s/%d", section, company, year)
-            return cached_sections[section]
+        if cached_sections and cache_key in cached_sections:
+            logger.info("Serving cached section '%s' for %s/%d", cache_key, company, year)
+            return cached_sections[cache_key]
 
     t0 = time.perf_counter()
 
@@ -700,15 +716,15 @@ def load_pl_section(company: str, year: int, section: str,
     df_stmt, preagg = _ensure_pl_stmt_cached(company, year, force_refresh=force_refresh)
 
     # Compute the section
-    section_dfs = compute_pl_section(df_stmt, preagg, section)
+    section_dfs = compute_pl_section(df_stmt, preagg, section, **kwargs)
     section_records = {key: _df_to_records(df) for key, df in section_dfs.items()}
 
     # Cache the section result (accumulate into existing dict)
     cached_sections = _caches["pl_sections"].get(company, year) or {}
-    cached_sections[section] = section_records
+    cached_sections[cache_key] = section_records
     _caches["pl_sections"].set(company, year, cached_sections)
 
-    logger.info("Computed section '%s' for %s/%d: %.2fs", section, company, year, time.perf_counter() - t0)
+    logger.info("Computed section '%s' for %s/%d: %.2fs", cache_key, company, year, time.perf_counter() - t0)
     return section_records
 
 
